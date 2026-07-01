@@ -1,0 +1,12 @@
+config.json
+data/
+__pycache__/
+*.pyc
+.env
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Grok build artifacts
+mcps/
+terminals/

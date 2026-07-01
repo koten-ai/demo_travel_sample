@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TravelPlan • Explore</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
+  <style>
+    #searchInput {
+      width: 650px;
+    }
+  </style>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body class="bg-base-100 font-sans">
+  <!-- Navbar -->
+  <div class="navbar bg-base-100 shadow-sm border-b">
+    <div class="max-w-7xl mx-auto w-full px-4">
+      <div class="navbar-start">
+        <a href="/" class="flex items-center gap-3">
+          <div class="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center text-white text-2xl font-bold">✈️</div>
+          <div>
+            <span class="text-2xl font-bold text-primary">TravelPlan</span>
+          </div>
+        </a>
+      </div>
+      <!-- <div class="navbar-center hidden md:flex">
+        <div class="tabs tabs-boxed bg-base-200 p-1">
+          <a class="tab tab-active">Discover</a>
+          <a class="tab tab-disabled" tabindex="-1">My Trips</a>
+          <a class="tab tab-disabled" tabindex="-1">Saved</a>
+        </div>
+      </div>
+      <div class="navbar-end gap-3">
+        <span class="badge badge-ghost hidden sm:inline-flex">Zeus + AI</span>
+        <div class="dropdown dropdown-end">
+          <div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+            <div class="w-8 h-8 bg-base-300 rounded-full flex items-center justify-center">👤</div>
+          </div>
+        </div>
+      </div> -->
+    </div>
+  </div>
+
+  <!-- Hero Search -->
+  <div class="hero hero-bg h-[380px] text-white">
+    <div class="hero-content text-center max-w-3xl mx-auto px-6">
+      <div class="w-full">
+        <h1 class="text-5xl font-bold mb-2 tracking-tight">Where to next?</h1>
+        <p class="text-lg mb-8 opacity-90">Find your perfect adventure with AI-powered search</p>
+
+        <div class="relative max-w-2xl mx-auto">
+          <form id="search-form" class="relative">
+            <input
+              id="searchInput" type="text" placeholder="Search destinations, activities, cities... (e.g. beach, Tokyo, hiking)"
+              class="search-input input input-lg w-full pr-16 bg-white/95 text-neutral-900 placeholder:text-neutral-500 focus:outline-none text-base rounded-3xl ai-style-change-2"
+              autocomplete="off">
+            <button
+              type="submit"
+              id="search-btn"
+              class="btn btn-primary btn-circle absolute right-2 top-1/2 -translate-y-1/2"
+              aria-label="Search"
+            >
+              <span id="search-btn-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 01-14 0 7 7 0 0114 0z" />
+                </svg>
+              </span>
+              <span id="search-btn-spinner" class="loading loading-spinner loading-sm hidden"></span>
+            </button>
+          </form>
+          <div class="text-xs opacity-70 mt-3 text-center">
+            Powered by Zeus • Full-text AI search
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="error-alert" class="alert alert-error max-w-7xl mx-auto mt-6 px-4 hidden" role="alert"></div>
+
+  <div id="summary-block" class="max-w-7xl mx-auto px-4 mt-6 hidden">
+    <div class="alert alert-info shadow-sm">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span id="summary-text"></span>
+    </div>
+  </div>
+
+  <div class="max-w-7xl mx-auto px-4 py-8">
+    <div class="flex flex-col lg:flex-row gap-8">
+      <!-- Filters Sidebar -->
+      <!-- <div class="lg:w-72 flex-shrink-0">
+        <div class="sticky top-6 space-y-8">
+          <div>
+            <h3 class="font-semibold mb-4 flex items-center gap-2">
+              <span>Filters</span>
+              <button type="button" id="reset-filters-btn" class="text-xs btn btn-ghost btn-xs text-primary">Reset</button>
+            </h3>
+
+            <div class="mb-6">
+              <p class="font-medium text-sm mb-3">Trip Type</p>
+              <div class="flex flex-wrap gap-2" id="tripTypeFilters">
+                <button type="button" data-filter="beach" class="filter-btn badge badge-lg badge-outline">🏖️ Beach</button>
+                <button type="button" data-filter="city" class="filter-btn badge badge-lg badge-outline">🏙️ City</button>
+                <button type="button" data-filter="mountain" class="filter-btn badge badge-lg badge-outline">🏔️ Mountain</button>
+                <button type="button" data-filter="culture" class="filter-btn badge badge-lg badge-outline">🏛️ Culture</button>
+              </div>
+            </div>
+
+            <div class="mb-6">
+              <p class="font-medium text-sm mb-3">Budget (per person)</p>
+              <div class="flex gap-2">
+                <button type="button" data-max="800" class="budget-btn btn btn-sm btn-outline flex-1">~$800</button>
+                <button type="button" data-max="1500" class="budget-btn btn btn-sm btn-outline flex-1">~$1500</button>
+                <button type="button" data-max="3000" class="budget-btn btn btn-sm btn-outline flex-1">~$3000+</button>
+              </div>
+            </div>
+
+            <div>
+              <p class="font-medium text-sm mb-3">Travel Month</p>
+              <select id="monthFilter" class="select select-bordered w-full">
+                <option value="">Any month</option>
+                <option value="dec">December 2026</option>
+                <option value="jan">January 2027</option>
+                <option value="feb">February 2027</option>
+                <option value="mar">March 2027</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div> -->
+
+      <!-- Main Content -->
+      <div class="flex-1">
+        <div class="flex flex-col sm:flex-row sm:justify-between sm:items-end gap-4 mb-6">
+          <div>
+            <h2 class="text-3xl font-semibold" id="resultsTitle">Discover Destinations</h2>
+            <p class="text-sm text-neutral-500" id="resultsCount">Search above to find your next adventure</p>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <div class="join">
+              <button type="button" id="gridBtn" class="join-item btn btn-sm btn-active">Grid</button>
+              <button type="button" id="listBtn" class="join-item btn btn-sm">List</button>
+            </div>
+
+            <select id="sortSelect" class="select select-bordered select-sm">
+              <option value="relevance">Relevance</option>
+              <option value="price-low">Price: Low to High</option>
+              <option value="price-high">Price: High to Low</option>
+              <option value="rating">Rating</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="resultsGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+        <div id="resultsList" class="hidden space-y-4"></div>
+
+        <div id="emptyState" class="text-center py-20">
+          <div class="text-7xl mb-6">🌍</div>
+          <h3 class="text-2xl font-medium mb-2">Ready to explore?</h3>
+          <p class="text-neutral-500 max-w-xs mx-auto">Describe your dream trip in the search bar above — warm beaches, city breaks, hiking, and more.</p>
+        </div>
+
+        <div id="noResultsState" class="hidden text-center py-20">
+          <div class="text-7xl mb-6">🔍</div>
+          <h3 class="text-2xl font-medium mb-2">No destinations found</h3>
+          <p class="text-neutral-500 max-w-xs mx-auto">Try broadening your search or clearing some filters</p>
+          <button type="button" id="reset-all-btn" class="mt-6 btn btn-primary">Clear all filters</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button
+    type="button"
+    id="debug-toggle"
+    class="btn btn-square shadow-lg debug-toggle-btn"
+    title="Toggle Zeus trace panel"
+    aria-expanded="false"
+  >
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+      <!-- Zeus favicon: golden lightning bolt on a dark cloud-grey square.
+           SVG is served at both /favicon.ico (admin :9091, api :8080) and
+           referenced from web/static/admin/index.html. Modern browsers
+           respect Content-Type over file extension, so the .ico route can
+           hand back image/svg+xml without trouble. -->
+      <rect width="64" height="64" rx="10" ry="10" fill="#1f2937" />
+      <path d="M36 6 L14 36 H28 L24 58 L50 26 H34 Z" fill="#facc15" stroke="#b45309" stroke-width="1.5"
+        stroke-linejoin="round" />
+    </svg>
+  </button>
+
+  <aside id="debug-panel" class="debug-panel is-hidden" aria-hidden="true">
+    <header class="debug-panel-header">
+      <h2 class="font-bold text-sm">Zeus Trace</h2>
+      <div class="flex gap-2">
+        <button type="button" id="trace-copy-full" class="btn btn-xs btn-ghost">Copy all</button>
+        <button type="button" id="debug-close" class="btn btn-xs btn-ghost" aria-label="Close">×</button>
+      </div>
+    </header>
+    <div id="trace-total" class="trace-total" style="display:none"></div>
+    <div id="trace-list" class="trace-list">
+      <div id="trace-empty" class="opacity-50 text-sm p-4">No search run yet.</div>
+    </div>
+  </aside>
+
+  <div id="toast" class="toast toast-bottom toast-end z-[70] hidden">
+    <div class="alert alert-success text-sm py-2"><span id="toast-msg"></span></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsnview@3.0.0/dist/index.umd.js"></script>
+  <script src="/static/trace.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>

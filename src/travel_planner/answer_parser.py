@@ -1,0 +1,252 @@
+"""Parse structured markdown LLM answers into JSON."""
+from __future__ import annotations
+
+import json
+import re
+from typing import Any
+
+from travel_planner.results_parser import MAX_RESULTS
+
+_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_JSON_FENCE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
+_SECTION = re.compile(r"^#{1,3}\s+(.+)$", re.MULTILINE)
+_NUMBERED_ITEM = re.compile(r"^\d+\.\s+\*\*(.+?)\*\*\s*$", re.MULTILINE)
+_BULLET_FIELD = re.compile(r"^-\s+\*\*(.+?)\*\*:\s*(.+)$", re.MULTILINE)
+_TIP = re.compile(r"\*\*Tip\*\*:\s*(.+?)(?=\n\n|\n\*\*|$)", re.DOTALL | re.IGNORECASE)
+_FOLLOW_UP = re.compile(r"(Would you like\b.+?\?)\s*$", re.DOTALL | re.IGNORECASE)
+
+_FIELD_ALIASES = {
+    "location": "location",
+    "description": "description",
+    "image": "image",
+    "price": "price",
+    "rating": "rating",
+    "duration": "duration",
+}
+
+
+def _strip_bold(text: str) -> str:
+    return _BOLD.sub(r"\1", text).strip()
+
+
+def _field_key(label: str) -> str:
+    normalized = label.strip().lower()
+    return _FIELD_ALIASES.get(normalized, normalized.replace(" ", "_"))
+
+
+def _normalize_markdown(text: str) -> str:
+    text = text.replace("\r\n", "\n").strip()
+    text = re.sub(r"(?<!\n)(###\s)", r"\n\1", text)
+    text = re.sub(r"(?<!\n)(\d+\.\s+\*\*)", r"\n\1", text)
+    text = re.sub(r"(?<!\n)(-\s+\*\*)", r"\n\1", text)
+    text = re.sub(r"(?<!\n)(\*\*Tip\*\*:)", r"\n\1", text, flags=re.IGNORECASE)
+    return text.strip()
+
+
+def _try_parse_json_block(text: str) -> dict[str, Any] | None:
+    match = _JSON_FENCE.search(text)
+    if not match:
+        return None
+    try:
+        data = json.loads(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _split_section_header(header: str) -> tuple[str, str]:
+    cleaned = _strip_bold(header)
+    for sep in (" – ", " - ", " — "):
+        if sep in cleaned:
+            name, section = cleaned.split(sep, 1)
+            return name.strip(), section.strip()
+    return cleaned, ""
+
+
+def _parse_item_block(block: str) -> dict[str, str]:
+    lines = block.strip().split("\n")
+    if not lines:
+        return {}
+
+    name = _strip_bold(lines[0])
+    item: dict[str, str] = {"name": name}
+
+    for line in lines[1:]:
+        match = _BULLET_FIELD.match(line.strip())
+        if not match:
+            continue
+        key = _field_key(_strip_bold(match.group(1)))
+        item[key] = match.group(2).strip()
+
+    return item
+
+
+def _parse_numbered_items(body: str) -> list[dict[str, str]]:
+    items: list[dict[str, str]] = []
+    matches = list(_NUMBERED_ITEM.finditer(body))
+    if not matches:
+        return items
+
+    for index, match in enumerate(matches):
+        start = match.end()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(body)
+        parsed = _parse_item_block(match.group(1) + "\n" + body[start:end])
+        if parsed.get("name"):
+            items.append(parsed)
+    return items
+
+
+def _extract_context(text: str) -> str:
+    first_section = _SECTION.search(text)
+    intro = text[: first_section.start()] if first_section else text
+    intro = _strip_bold(intro)
+    intro = re.sub(r"\s+", " ", intro).strip()
+    if not intro:
+        return ""
+    if "zeus" in intro.lower() or "unavailable" in intro.lower():
+        return intro
+    return intro if len(intro) > 40 else ""
+
+
+def _extract_tip(text: str) -> str:
+    match = _TIP.search(text)
+    return match.group(1).strip() if match else ""
+
+
+def _extract_follow_up(text: str) -> str:
+    match = _FOLLOW_UP.search(text.strip())
+    return match.group(1).strip() if match else ""
+
+
+def _looks_like_airport_section(name: str) -> bool:
+    lowered = name.lower()
+    return any(token in lowered for token in ("airport", "aéroport", "cdg", "ory", "(", ")"))
+
+
+def parse_markdown_answer(text: str | None) -> dict[str, Any] | None:
+    """Parse a markdown LLM answer into structured JSON.
+
+    Returns None when no recognizable structure is found.
+    """
+    if not text or not text.strip():
+        return None
+
+    embedded = _try_parse_json_block(text)
+    if embedded is not None:
+        return embedded
+
+    normalized = _normalize_markdown(text)
+    sections = list(_SECTION.finditer(normalized))
+    if not sections:
+        items = _parse_numbered_items(normalized)
+        if not items:
+            return None
+        result: dict[str, Any] = {"items": items}
+        tip = _extract_tip(normalized)
+        if tip:
+            result["tip"] = tip
+        context = _extract_context(normalized)
+        if context:
+            result["context"] = context
+        follow_up = _extract_follow_up(normalized)
+        if follow_up:
+            result["follow_up"] = follow_up
+        return result
+
+    airports: list[dict[str, Any]] = []
+    generic_sections: list[dict[str, Any]] = []
+
+    for index, match in enumerate(sections):
+        start = match.end()
+        end = sections[index + 1].start() if index + 1 < len(sections) else len(normalized)
+        header = match.group(1).strip()
+        body = normalized[start:end]
+        name, section_label = _split_section_header(header)
+        items = _parse_numbered_items(body)
+
+        entry: dict[str, Any] = {"name": name}
+        if section_label:
+            entry["section"] = section_label
+        if items:
+            if _looks_like_airport_section(name):
+                entry["hotels"] = items
+                airports.append(entry)
+            else:
+                entry["items"] = items
+                generic_sections.append(entry)
+
+    if not airports and not generic_sections:
+        return None
+
+    result = {}
+    if airports:
+        result["airports"] = airports
+    if generic_sections:
+        result["sections"] = generic_sections
+
+    tip = _extract_tip(normalized)
+    if tip:
+        result["tip"] = tip
+    context = _extract_context(normalized)
+    if context:
+        result["context"] = context
+    follow_up = _extract_follow_up(normalized)
+    if follow_up:
+        result["follow_up"] = follow_up
+
+    return result
+
+
+def structured_answer_to_results(data: dict[str, Any] | None) -> list[dict[str, str]]:
+    """Flatten structured answer JSON into destination-style result cards."""
+    if not data:
+        return []
+
+    results: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add_card(name: str, description: str = "", image: str = "", location: str = "") -> None:
+        key = name.lower()
+        if not name or key in seen:
+            return
+        seen.add(key)
+        card: dict[str, str] = {"name": name, "description": description, "image": image}
+        if location:
+            card["location"] = location
+        results.append(card)
+
+    for airport in data.get("airports") or []:
+        airport_name = str(airport.get("name") or "")
+        for hotel in airport.get("hotels") or []:
+            if not isinstance(hotel, dict):
+                continue
+            add_card(
+                str(hotel.get("name") or ""),
+                str(hotel.get("description") or ""),
+                str(hotel.get("image") or ""),
+                str(hotel.get("location") or airport_name),
+            )
+
+    for section in data.get("sections") or []:
+        section_name = str(section.get("name") or "")
+        for item in section.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            add_card(
+                str(item.get("name") or ""),
+                str(item.get("description") or ""),
+                str(item.get("image") or ""),
+                str(item.get("location") or section_name),
+            )
+
+    for item in data.get("items") or []:
+        if not isinstance(item, dict):
+            continue
+        add_card(
+            str(item.get("name") or ""),
+            str(item.get("description") or ""),
+            str(item.get("image") or ""),
+            str(item.get("location") or ""),
+        )
+
+    return results[:MAX_RESULTS]

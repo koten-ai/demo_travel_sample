@@ -1,0 +1,58 @@
+{
+  "_comment": "Travel planner config. Copy to config.json and fill in your keys.",
+
+  "default_zeus_connection": "default",
+  "zeus_connections": [
+    {
+      "id": "zeus_default",
+      "name": "default",
+      "url": "http://host.docker.internal:8080",
+      "auth_mode": "none",
+      "username": "",
+      "password": "",
+      "bearer_token": "",
+      "session_id": "",
+      "scope_credentials": {
+        "travel-sample/_default": { "username": "", "password": "" }
+      },
+      "scope_contracts": {
+        "travel-sample/_default": {
+          "contract_id": "",
+          "contract_hash": ""
+        }
+      },
+      "enable_durable_sessions": true
+    }
+  ],
+
+  "default_provider": "grok",
+  "providers": {
+    "grok": {
+      "label": "xAI Grok",
+      "base_url": "https://api.x.ai/v1",
+      "api_key": "",
+      "models": [
+        "grok-4-1-fast-non-reasoning",
+        "grok-4-1-fast-reasoning",
+        "grok-4"
+      ]
+    },
+    "openai": {
+      "label": "OpenAI",
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "",
+      "models": ["gpt-4o", "gpt-4o-mini"]
+    }
+  },
+
+  "default_api_version": "v2",
+  "default_mode": "travel_booking",
+  "default_sample": "travel-sample",
+  "samples": {
+    "travel-sample": {
+      "bucket": "travel-sample",
+      "scope": "_default",
+      "collection": "_default"
+    }
+  }
+}

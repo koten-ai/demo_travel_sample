@@ -1,0 +1,53 @@
+"""Flask application factory."""
+import os
+
+from flask import Flask, jsonify, render_template, request
+
+from travel_planner.async_runner import startup
+from travel_planner.paths import PACKAGE_DIR
+from travel_planner.search import run_search
+from travel_planner.zeus_config import patch_zeus_paths
+
+_app: Flask | None = None
+
+
+def create_app() -> Flask:
+    """Create and configure the Flask application."""
+    global _app
+    if _app is not None:
+        return _app
+
+    patch_zeus_paths()
+    startup()
+
+    app = Flask(
+        __name__,
+        template_folder=str(PACKAGE_DIR / "templates"),
+        static_folder=str(PACKAGE_DIR / "static"),
+    )
+
+    @app.get("/")
+    def index():
+        return render_template("index.html")
+
+    @app.post("/api/search")
+    def api_search():
+        body = request.get_json(silent=True) or {}
+        query = (body.get("query") or "").strip()
+        if not query:
+            return jsonify({"error": "empty query"}), 400
+
+        result = run_search(query, body.get("chat_id"))
+        if result.get("error"):
+            status = 502 if "network error" in result["error"] else 400
+            return jsonify(result), status
+        return jsonify(result)
+
+    @app.get("/api/tool-order")
+    def api_tool_order():
+        from python3.trace.metrics import build_tool_order
+
+        return jsonify(build_tool_order())
+
+    _app = app
+    return app

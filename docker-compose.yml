@@ -1,0 +1,23 @@
+services:
+  travel-planner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel-planner
+    ports:
+      - "5000:5000"
+    environment:
+      ENVIRONMENT: dev
+      ZEUS_URL: "http://host.docker.internal:8080"
+      CHAT_LOG_PATH: "/app/data/chats.jsonl"
+      PORT: "5000"
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+      - ./src/travel_planner/templates:/app/src/travel_planner/templates
+      - ./src/travel_planner/static:/app/src/travel_planner/static
+      - ./src/travel_planner:/app/src/travel_planner
+      - ./vendor:/app/vendor
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
