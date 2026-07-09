@@ -2,11 +2,13 @@
 import os
 
 from flask import Flask, jsonify, render_template, request
+from zeus_client import build_tool_order
 
 from travel_planner.async_runner import startup
+from travel_planner.chat_store import CHATS
 from travel_planner.paths import PACKAGE_DIR
 from travel_planner.search import run_search
-from travel_planner.zeus_config import patch_zeus_paths
+from travel_planner.zeus_config import configure_zeus_client
 
 _app: Flask | None = None
 
@@ -17,7 +19,7 @@ def create_app() -> Flask:
     if _app is not None:
         return _app
 
-    patch_zeus_paths()
+    configure_zeus_client()
     startup()
 
     app = Flask(
@@ -28,7 +30,7 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        return render_template("index.html", tool_order=build_tool_order(CHATS))
 
     @app.post("/api/search")
     def api_search():
@@ -45,9 +47,7 @@ def create_app() -> Flask:
 
     @app.get("/api/tool-order")
     def api_tool_order():
-        from python3.trace.metrics import build_tool_order
-
-        return jsonify(build_tool_order())
+        return jsonify(build_tool_order(CHATS))
 
     _app = app
     return app

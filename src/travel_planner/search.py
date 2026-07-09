@@ -1,20 +1,27 @@
-"""Travel search via the vendored Zeus agent loop."""
+"""Travel search via the kotenai-zeus-client agent loop."""
 from __future__ import annotations
 
 import time
 import uuid
+from dataclasses import asdict
+from urllib.parse import urlparse
 
 import httpx
-
-from python3.agent.loop import run_agent
-from python3.config import load_config, resolve_zeus_config
-from python3.constants import normalize_api_version
-from python3.logging_setup import logger
-from python3.storage.chat_store import CHATS, chat_lock, persist_chat
+from zeus_client import (
+    StructuredAgentResponse,
+    build_tool_order,
+    load_config,
+    logger,
+    normalize_api_version,
+    resolve_llm_provider_config,
+    resolve_zeus_config,
+    run_agent,
+)
 
 from travel_planner.answer_parser import parse_markdown_answer, structured_answer_to_results
 from travel_planner.async_runner import run_coro
-from travel_planner.results_parser import extract_destinations
+from travel_planner.chat_store import CHATS, chat_lock, persist_chat
+from travel_planner.results_parser import extract_destinations, zeus_data_to_results
 
 TRAVEL_PROMPT_PREFIX = (
     "Find travel destinations that match these preferences. "
@@ -24,20 +31,28 @@ TRAVEL_PROMPT_PREFIX = (
 )
 
 
+def _provider_id(provider: dict) -> str:
+    label = (provider.get("label") or "").strip().lower()
+    if label:
+        return label.split()[0]
+    host = urlparse(provider.get("base_url") or "").netloc
+    return host.split(".")[0] if host else "default"
+
+
 async def _search_async(query: str, chat_id: str | None) -> dict:
     cfg = await load_config()
     zcfg = resolve_zeus_config(cfg)
     zeus_url = (zcfg.get("url") or "").rstrip("/")
-    zeus_connection = zcfg.get("name") or cfg.get("default_zeus_connection") or ""
+    zeus_connection = zcfg.get("name") or "default"
     if not zeus_url:
         raise ValueError("no Zeus URL configured (edit config.json)")
 
-    provider_id = cfg.get("default_provider")
-    provider = cfg.get("providers", {}).get(provider_id, {})
+    provider = resolve_llm_provider_config(cfg)
     base_url = (provider.get("base_url") or "").rstrip("/")
     api_key = provider.get("api_key") or ""
+    provider_id = _provider_id(provider)
     if not api_key:
-        raise ValueError(f"provider '{provider_id}' has no api_key set (edit config.json)")
+        raise ValueError(f"llm_provider has no api_key set (edit config.json)")
     model = (provider.get("models") or ["gpt-4o"])[0]
 
     api_version = normalize_api_version(cfg.get("default_api_version", "v2"))
@@ -64,7 +79,7 @@ async def _search_async(query: str, chat_id: str | None) -> dict:
         prior_sid = CHATS[chat_id].get("zeus_session_id", "") or ""
         prior_round = int(CHATS[chat_id].get("zeus_round", 0) or 0)
 
-        answer, trace, new_turns, session_meta = await run_agent(
+        answer, trace, new_turns, session_meta, structured = await run_agent(
             zeus_url,
             zcfg,
             base_url,
@@ -82,6 +97,7 @@ async def _search_async(query: str, chat_id: str | None) -> dict:
             conv_id=chat_id,
             zeus_session_id=prior_sid,
             zeus_round=prior_round,
+            structured=True,
         )
 
         CHATS[chat_id]["turns"] = new_turns
@@ -108,14 +124,17 @@ async def _search_async(query: str, chat_id: str | None) -> dict:
         CHATS[chat_id].setdefault("traces", []).append(entry)
         await persist_chat(chat_id)
 
-    results = extract_destinations(trace)
+    results = zeus_data_to_results(structured.zeus_data)
+    if not results:
+        results = extract_destinations(trace)
     structured_answer = parse_markdown_answer(answer)
     if not results and structured_answer:
         results = structured_answer_to_results(structured_answer)
     logger.info(
-        "search complete chat_id=%s results=%d structured=%s answer_len=%d",
+        "search complete chat_id=%s results=%d zeus_data=%d structured=%s answer_len=%d",
         chat_id,
         len(results),
+        len(structured.zeus_data),
         bool(structured_answer),
         len(answer or ""),
     )
@@ -125,8 +144,10 @@ async def _search_async(query: str, chat_id: str | None) -> dict:
         "query": query,
         "answer": answer,
         "structured_answer": structured_answer,
+        "structured_response": _structured_response_payload(structured),
         "results": results,
         "trace": trace,
+        "tool_order": build_tool_order(CHATS),
         "target": target,
         "api_version": api_version,
         "mode": mode,
@@ -138,6 +159,11 @@ async def _search_async(query: str, chat_id: str | None) -> dict:
         "session_round": session_meta.get("round") or prior_round,
         "contract_status": session_meta.get("contract_status"),
     }
+
+
+def _structured_response_payload(structured: StructuredAgentResponse) -> dict:
+    """Serialize StructuredAgentResponse for JSON API responses."""
+    return asdict(structured)
 
 
 def run_search(query: str, chat_id: str | None = None) -> dict:

@@ -77,6 +77,27 @@ def _rows_from_tool_call(rec: dict) -> list[dict]:
     return rows
 
 
+def zeus_data_to_results(zeus_data: list[dict] | None) -> list[dict[str, str]]:
+    """Convert schema-filtered zeus_data rows into destination cards."""
+    if not zeus_data:
+        return []
+
+    seen: set[str] = set()
+    results: list[dict[str, str]] = []
+    for row in zeus_data:
+        card = _normalize_row(row)
+        if not card:
+            continue
+        key = card["name"].lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(card)
+        if len(results) >= MAX_RESULTS:
+            break
+    return results
+
+
 def extract_destinations(trace: dict | None) -> list[dict[str, str]]:
     """Walk trace tool_calls and return normalized destination cards."""
     if not trace:

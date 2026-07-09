@@ -19,3 +19,10 @@ def test_tool_order_returns_versions(flask_client):
     assert "v2" in data
     assert isinstance(data["v2"], list)
     assert len(data["v2"]) > 0
+
+
+def test_index_injects_tool_order(flask_client):
+    response = flask_client.get("/")
+    assert response.status_code == 200
+    assert b"toolOrder" in response.data
+    assert b'"v2"' in response.data
