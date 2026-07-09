@@ -2,7 +2,7 @@
 
 A demo travel search app that combines natural-language queries with the [Zeus Engine](https://github.com/koten-ai) and an LLM agent loop. Describe where you want to go in plain English and get destination recommendations backed by real Zeus `travel-sample` data.
 
-Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, with vendored Zeus client code under `vendor/` so the project runs as a self-contained package.
+Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, using the [`kotenai-zeus-client`](https://github.com/koten-ai/zeus_client_python) package from the sibling `../zeus_client_python` repo for the Zeus agent loop.
 
 ## Features
 
@@ -34,7 +34,7 @@ sequenceDiagram
 ```
 
 1. The user submits travel preferences through the search UI.
-2. Flask calls `run_search()`, which invokes the vendored Zeus agent loop in `travel_booking` mode.
+2. Flask calls `run_search()`, which invokes `zeus_client.run_agent()` in `travel_booking` mode.
 3. The LLM decides which Zeus tools to call and synthesizes a natural-language answer.
 4. `results_parser` extracts destination cards from tool-call traces; if none are found, `answer_parser` parses the markdown answer into structured JSON.
 5. The frontend renders cards and appends the trace to the debug panel.
@@ -66,6 +66,7 @@ Docker maps `ZEUS_URL` to `http://host.docker.internal:8080` by default so the c
 ### Local development
 
 ```bash
+# zeus_client_python must live at ../zeus_client_python (monorepo layout)
 cp config.example.json config.json
 # Edit config.json with your API keys and Zeus URL
 
@@ -81,10 +82,9 @@ Copy `config.example.json` to `config.json` (gitignored). Key settings:
 
 | Setting | Description |
 |---------|-------------|
-| `zeus_connections[].url` | Zeus Engine base URL |
-| `default_provider` | LLM provider ID (`grok` or `openai`) |
-| `providers.<id>.api_key` | LLM API key (**required**) |
-| `providers.<id>.models` | Model list; first entry is the default |
+| `zeus.url` or `zeus_connections[].url` | Zeus Engine base URL (legacy `zeus_connections` is normalized on load) |
+| `llm_provider.api_key` or `providers.<id>.api_key` | LLM API key (**required**) |
+| `llm_provider.models` or `providers.<id>.models` | Model list; first entry is the default |
 | `default_mode` | Agent mode (`travel_booking`) |
 | `default_sample` | Zeus sample bucket (`travel-sample`) |
 
@@ -93,6 +93,8 @@ Copy `config.example.json` to `config.json` (gitignored). Key settings:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ZEUS_URL` | — | Overrides Zeus URL from config |
+| `ZEUS_CLIENT_CONFIG_DIR` | project root | Directory containing `config.json` |
+| `ZEUS_CHAT_REQUESTS_DIR` | `data/chat_requests` | Local chat_request catalog snapshots |
 | `PORT` | `5000` | HTTP listen port |
 | `CHAT_LOG_PATH` | `data/chats.jsonl` | Chat persistence file |
 | `ENVIRONMENT` | — | Set to `dev` for Flask debug mode |
@@ -153,12 +155,13 @@ demo_travel_sample/
 │   ├── results_parser.py     # Extract destination cards from Zeus traces
 │   ├── answer_parser.py      # Markdown answer → structured JSON fallback
 │   ├── async_runner.py       # Background asyncio loop for httpx
-│   ├── zeus_config.py        # Path patching for vendored Zeus client
+│   ├── chat_store.py         # Multi-turn chat persistence (JSONL)
+│   ├── tool_order.py         # Trace panel tool-order endpoint
+│   ├── zeus_config.py        # zeus_client env configuration
 │   ├── templates/            # Jinja2 HTML (index.html)
 │   └── static/               # CSS, JS, trace panel
-├── vendor/                   # Vendored Zeus agent loop and mode catalogs
-│   ├── python3/              # Agent loop, dispatch, config, trace
-│   └── chat_requests/        # Mode catalogs (travel_booking, etc.)
+├── data/
+│   └── chat_requests/        # travel_booking catalog snapshot
 ├── tests/                    # Pytest suite
 ├── config.example.json       # Configuration template
 ├── docker-compose.yml
@@ -196,7 +199,8 @@ travel-planner
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
 | `no Zeus URL configured` | Missing or empty config | Create `config.json` from `config.example.json` |
-| `provider has no api_key` | Empty LLM key | Set `providers.<name>.api_key` in `config.json` |
+| `llm_provider has no api_key` | Empty LLM key | Set `llm_provider.api_key` (or `providers.<name>.api_key`) in `config.json` |
+| `no chat_request file for mode 'travel_booking'` | Missing catalog | Ensure `data/chat_requests/by_use_case/chat_request_travel_booking_v2.json` exists |
 | Empty destination cards | LLM returned prose only | Check `structured_answer` in the API response |
 | Docker can't reach Zeus | Wrong network URL | Set `zeus_connections[].url` to a host-accessible address (e.g. `http://host.docker.internal:8080`) |
 | `network error` on search | Zeus or LLM unreachable | Verify Zeus is running and API key is valid |
