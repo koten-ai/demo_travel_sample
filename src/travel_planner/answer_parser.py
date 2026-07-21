@@ -17,11 +17,14 @@ _FOLLOW_UP = re.compile(r"(Would you like\b.+?\?)\s*$", re.DOTALL | re.IGNORECAS
 
 _FIELD_ALIASES = {
     "location": "location",
+    "address": "address",
     "description": "description",
     "image": "image",
     "price": "price",
     "rating": "rating",
     "duration": "duration",
+    "url": "url",
+    "directions": "directions",
 }
 
 
@@ -128,7 +131,10 @@ def parse_markdown_answer(text: str | None) -> dict[str, Any] | None:
 
     Returns None when no recognizable structure is found.
     """
-    if not text or not text.strip():
+    # Structured agent mode may already return a dict answer; leave it as-is.
+    if isinstance(text, dict):
+        return text if text else None
+    if not isinstance(text, str) or not text.strip():
         return None
 
     embedded = _try_parse_json_block(text)
@@ -205,14 +211,32 @@ def structured_answer_to_results(data: dict[str, Any] | None) -> list[dict[str, 
     results: list[dict[str, str]] = []
     seen: set[str] = set()
 
-    def add_card(name: str, description: str = "", image: str = "", location: str = "") -> None:
+    def add_card(item: dict[str, Any], fallback_location: str = "") -> None:
+        name = str(item.get("name") or "").strip()
         key = name.lower()
         if not name or key in seen:
             return
         seen.add(key)
-        card: dict[str, str] = {"name": name, "description": description, "image": image}
+        location = (
+            str(item.get("location") or "").strip()
+            or str(item.get("address") or "").strip()
+            or fallback_location
+        )
+        # Prefer real image fields; do not promote website URL into image.
+        image = str(item.get("image") or item.get("image_url") or "").strip()
+        card: dict[str, str] = {
+            "name": name,
+            "description": str(item.get("description") or ""),
+            "image": image,
+        }
         if location:
             card["location"] = location
+        price = str(item.get("price") or "").strip()
+        if price:
+            card["price"] = price
+        url = str(item.get("url") or "").strip()
+        if url:
+            card["url"] = url
         results.append(card)
 
     for airport in data.get("airports") or []:
@@ -220,33 +244,20 @@ def structured_answer_to_results(data: dict[str, Any] | None) -> list[dict[str, 
         for hotel in airport.get("hotels") or []:
             if not isinstance(hotel, dict):
                 continue
-            add_card(
-                str(hotel.get("name") or ""),
-                str(hotel.get("description") or ""),
-                str(hotel.get("image") or ""),
-                str(hotel.get("location") or airport_name),
-            )
+            add_card(hotel, airport_name)
 
     for section in data.get("sections") or []:
-        section_name = str(section.get("name") or "")
+        section_name = str(section.get("name") or "").rstrip(":").strip()
+        # Avoid using generic list headers as the card location.
+        fallback = "" if section_name.lower() in {"top matching hotels", "hotels", "results"} else section_name
         for item in section.get("items") or []:
             if not isinstance(item, dict):
                 continue
-            add_card(
-                str(item.get("name") or ""),
-                str(item.get("description") or ""),
-                str(item.get("image") or ""),
-                str(item.get("location") or section_name),
-            )
+            add_card(item, fallback)
 
     for item in data.get("items") or []:
         if not isinstance(item, dict):
             continue
-        add_card(
-            str(item.get("name") or ""),
-            str(item.get("description") or ""),
-            str(item.get("image") or ""),
-            str(item.get("location") or ""),
-        )
+        add_card(item)
 
     return results[:MAX_RESULTS]

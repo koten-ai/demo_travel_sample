@@ -85,3 +85,42 @@ def test_structured_answer_to_results():
     assert results[0]["name"] == "Hôtel ibis Paris CDG Airport"
     assert results[0]["location"] == "Directly connected to Terminal 1 & 3 via covered walkway"
     assert results[4]["name"] == "Hôtel Hilton Paris Orly Airport"
+
+
+TRAVEL_SAMPLE_PARIS_HOTELS = (
+    "**Nearest hotels to Paris airports (CDG & Orly)** Here are real hotels in Paris "
+    "that match your preference for proximity to the main Paris airports. "
+    "### Top matching hotels: "
+    "1. **Kube Hotel** "
+    "- **Description**: Stylish and atmospheric, the Kube Hotel exudes a high tech decor. "
+    "- **Price**: €190-2,500 "
+    "- **Address**: 1-5 Passage Ruelle, Paris/18th arrondissement "
+    "- **URL**: http://www.kubehotel-paris.com/en/page/kube-hotel-paris-18.1.html "
+    "2. **Renaissance Paris Arc de Triomphe** "
+    "- **Description**: Thoroughly modern property with floor-to-ceiling windows. "
+    "- **Address**: Avenue de Wagram 39, Paris/17th arrondissement "
+    "- **URL**: http://www.marriott.com/hotels/travel/parwg "
+    "3. **Hôtel de Crillon** "
+    "- **Description**: Legendary hotel overlooking Place de la Concorde. "
+    "- **Address**: 10, place de la Concorde, Paris/8th arrondissement"
+)
+
+
+def test_parse_travel_sample_top_matching_hotels():
+    """LLM often returns ### Top matching hotels with Address/Price/URL fields."""
+    data = parse_markdown_answer(TRAVEL_SAMPLE_PARIS_HOTELS)
+    assert data is not None
+    assert "sections" in data
+    assert data["sections"][0]["name"].startswith("Top matching hotels")
+    assert len(data["sections"][0]["items"]) == 3
+    assert data["sections"][0]["items"][0]["name"] == "Kube Hotel"
+    assert data["sections"][0]["items"][0]["price"] == "€190-2,500"
+    assert "Passage Ruelle" in data["sections"][0]["items"][0]["address"]
+
+    results = structured_answer_to_results(data)
+    assert len(results) == 3
+    assert results[0]["name"] == "Kube Hotel"
+    # Address maps to location; generic section title is not used as location.
+    assert "Passage Ruelle" in results[0]["location"]
+    assert results[0]["price"] == "€190-2,500"
+    assert "kubehotel" in results[0]["url"]
