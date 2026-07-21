@@ -21,7 +21,12 @@ from zeus_client import (
 from travel_planner.answer_parser import parse_markdown_answer, structured_answer_to_results
 from travel_planner.async_runner import run_coro
 from travel_planner.chat_store import CHATS, chat_lock, persist_chat
+from travel_planner.output_schema import DEMO_OUTPUT_SCHEMA
 from travel_planner.results_parser import extract_destinations, zeus_data_to_results
+from travel_planner.zeus_config import patch_durable_session_v2_routes
+
+# Ensure /v2/session* is used even when the image has an older client.
+patch_durable_session_v2_routes()
 
 TRAVEL_PROMPT_PREFIX = (
     "Find travel destinations that match these preferences. "
@@ -98,6 +103,7 @@ async def _search_async(query: str, chat_id: str | None) -> dict:
             zeus_session_id=prior_sid,
             zeus_round=prior_round,
             structured=True,
+            output_schema=DEMO_OUTPUT_SCHEMA,
         )
 
         CHATS[chat_id]["turns"] = new_turns
@@ -130,13 +136,14 @@ async def _search_async(query: str, chat_id: str | None) -> dict:
     structured_answer = parse_markdown_answer(answer)
     if not results and structured_answer:
         results = structured_answer_to_results(structured_answer)
+    answer_len = len(answer) if isinstance(answer, str) else len(str(answer or ""))
     logger.info(
         "search complete chat_id=%s results=%d zeus_data=%d structured=%s answer_len=%d",
         chat_id,
         len(results),
         len(structured.zeus_data),
         bool(structured_answer),
-        len(answer or ""),
+        answer_len,
     )
 
     return {
