@@ -8,8 +8,9 @@ services:
       - "5000:5000"
     environment:
       ENVIRONMENT: dev
-      # Omit ZEUS_URL so zeus_connections[].url in config.json is used.
-      # Set ZEUS_URL here only when you need to override config (e.g. local Zeus on the host).
+      # Reach Zeus on the host from this container (matches config.example.json).
+      # config.json zeus.url should also use host.docker.internal when running via Compose.
+      ZEUS_URL: "http://host.docker.internal:8080"
       CHAT_LOG_PATH: "/app/data/chats.jsonl"
       ZEUS_CLIENT_CONFIG_DIR: "/app"
       ZEUS_CHAT_REQUESTS_DIR: "/app/data/chat_requests"

@@ -4,6 +4,8 @@ A demo travel search app that combines natural-language queries with the [Zeus E
 
 Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, using the [`kotenai-zeus-client`](https://github.com/koten-ai/zeus_client_python) package from the sibling `../zeus_client_python` repo for the Zeus agent loop.
 
+**Reference demo** for the [Demo Builder Kit](../zeus_client_python/docs/demo-builder/) (build similar apps from docs). GitBook: site section **Demo** → Python.
+
 ## Features
 
 - **Natural-language search** — Ask for destinations by vibe, budget, region, or activity (e.g. *"warm beaches in Europe under $2000"*).
