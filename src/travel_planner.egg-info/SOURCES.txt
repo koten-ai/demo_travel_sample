@@ -1,9 +1,12 @@
+README.md
 pyproject.toml
 src/travel_planner/__init__.py
 src/travel_planner/__main__.py
 src/travel_planner/answer_parser.py
 src/travel_planner/app.py
 src/travel_planner/async_runner.py
+src/travel_planner/chat_store.py
+src/travel_planner/output_schema.py
 src/travel_planner/paths.py
 src/travel_planner/results_parser.py
 src/travel_planner/search.py
@@ -17,6 +20,11 @@ src/travel_planner.egg-info/top_level.txt
 src/travel_planner/static/app.css
 src/travel_planner/static/app.js
 src/travel_planner/static/trace.js
+src/travel_planner/static/zeus_client_chat_trace.js
+src/travel_planner/static/zeus_client_chat_trace.js.map
 src/travel_planner/templates/index.html
 tests/test_answer_parser.py
+tests/test_app.py
+tests/test_async_runner.py
+tests/test_output_schema.py
 tests/test_results_parser.py
