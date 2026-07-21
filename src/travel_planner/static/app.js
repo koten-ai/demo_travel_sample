@@ -40,32 +40,139 @@
       .map(([type]) => type);
   }
 
+  function parsePrice(value) {
+    if (value == null || value === "") return null;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    const text = String(value).trim();
+    if (!text) return null;
+    // Prefer the lower bound of ranges like "€70-120" or "190-2500".
+    const match = text.replace(/,/g, "").match(/(\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const n = Number(match[1]);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function isImageUrl(url) {
+    if (!url || typeof url !== "string") return false;
+    if (url.startsWith("data:image/")) return true;
+    return /\.(jpe?g|png|gif|webp|svg)(\?|#|$)/i.test(url);
+  }
+
+  /** If description is a JSON hotel blob, unwrap it into flat fields. */
+  function unwrapHotelBlob(raw) {
+    const out = { ...raw };
+    let blob = null;
+    const desc = raw.description;
+    if (desc && typeof desc === "object" && !Array.isArray(desc)) {
+      blob = desc;
+    } else if (typeof desc === "string") {
+      const t = desc.trim();
+      if (t.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(t);
+          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) blob = parsed;
+        } catch (_) {
+          /* not JSON */
+        }
+      }
+    }
+    if (!blob) return out;
+
+    for (const [k, v] of Object.entries(blob)) {
+      if (v == null || v === "" || v === "null") continue;
+      if (out[k] == null || out[k] === "" || k === "description") {
+        out[k] = v;
+      }
+    }
+    if (typeof out.description === "object") {
+      out.description = out.description.description || "";
+    } else if (typeof out.description === "string" && out.description.trim().startsWith("{")) {
+      try {
+        const inner = JSON.parse(out.description);
+        out.description = (inner && inner.description) || "";
+      } catch (_) {
+        out.description = "";
+      }
+    }
+    return out;
+  }
+
   function normalizeResult(raw, index) {
+    raw = unwrapHotelBlob(raw || {});
     const title = raw.name || raw.title || "Unknown";
+    const location = raw.location || raw.address || "";
+    const region = [raw.city, raw.state, raw.country].filter(Boolean).join(", ");
     const tags = Array.isArray(raw.tags)
       ? raw.tags.map(String)
       : typeof raw.tags === "string"
         ? raw.tags.split(",").map((t) => t.trim()).filter(Boolean)
         : [];
 
+    const imageCandidate = raw.image || raw.image_url || raw.photo || raw.thumbnail || "";
+    const priceRaw = raw.price != null && raw.price !== "" ? String(raw.price) : "";
     const dest = {
       id: index + 1,
       title,
-      location: raw.location || "",
-      image: raw.image || "",
-      price: raw.price != null ? Number(raw.price) : null,
+      location,
+      region,
+      address: raw.address || location || "",
+      city: raw.city || "",
+      state: raw.state || "",
+      country: raw.country || "",
+      image: isImageUrl(imageCandidate) ? imageCandidate : "",
+      price: parsePrice(raw.price),
+      priceLabel: priceRaw,
+      url: raw.url || raw.website || raw.link || "",
       rating: raw.rating != null ? Number(raw.rating) : null,
       duration: raw.duration || "",
-      type: Array.isArray(raw.type) ? raw.type : inferTypes({ title, location: raw.location || "", description: raw.description || "" }),
+      type: Array.isArray(raw.type) ? raw.type : inferTypes({ title, location, description: raw.description || "" }),
       tags,
       month: raw.month || "",
-      description: raw.description || "",
+      description: typeof raw.description === "string" ? raw.description : "",
     };
+
+    // Never show raw JSON as the card blurb.
+    if (dest.description.trim().startsWith("{")) {
+      dest.description = "";
+    }
 
     if (!dest.image) {
       dest.image = placeholderImage(title);
     }
     return dest;
+  }
+
+  function formatPriceBadge(dest) {
+    if (dest.priceLabel) {
+      return `<div class="absolute top-4 right-4 badge badge-primary badge-lg font-medium">${escapeHtml(dest.priceLabel)}</div>`;
+    }
+    if (dest.price != null) {
+      return `<div class="absolute top-4 right-4 badge badge-primary badge-lg font-medium">$${dest.price}</div>`;
+    }
+    return "";
+  }
+
+  function cardDetailsHtml(dest) {
+    const lines = [];
+    if (dest.address) {
+      lines.push(`<div class="text-xs text-neutral-500"><span class="font-semibold text-neutral-600">Address:</span> ${escapeHtml(dest.address)}</div>`);
+    }
+    const region = dest.region || [dest.city, dest.state, dest.country].filter(Boolean).join(", ");
+    if (region && region !== dest.address) {
+      lines.push(`<div class="text-xs text-neutral-500"><span class="font-semibold text-neutral-600">Location:</span> ${escapeHtml(region)}</div>`);
+    }
+    if (dest.priceLabel) {
+      lines.push(`<div class="text-xs text-neutral-500"><span class="font-semibold text-neutral-600">Price:</span> ${escapeHtml(dest.priceLabel)}</div>`);
+    }
+    if (dest.url) {
+      const href = escapeAttr(dest.url);
+      lines.push(
+        `<div class="text-xs text-neutral-500 truncate"><span class="font-semibold text-neutral-600">Website:</span> ` +
+          `<a href="${href}" target="_blank" rel="noopener noreferrer" class="link link-primary">${escapeHtml(dest.url)}</a></div>`
+      );
+    }
+    if (!lines.length) return "";
+    return `<div class="mt-3 space-y-1">${lines.join("")}</div>`;
   }
 
   function setLoading(busy) {
@@ -105,9 +212,7 @@
 
   function createCard(dest) {
     const img = escapeAttr(dest.image);
-    const priceBadge = dest.price != null
-      ? `<div class="absolute top-4 right-4 badge badge-primary badge-lg font-medium">$${dest.price}</div>`
-      : "";
+    const priceBadge = formatPriceBadge(dest);
     const rating = dest.rating != null
       ? `<div class="flex items-center gap-1 text-amber-500 text-sm font-medium">★ ${dest.rating}</div>`
       : "";
@@ -117,6 +222,7 @@
     const duration = dest.duration
       ? `<div class="text-xs text-neutral-500">${escapeHtml(dest.duration)}</div>`
       : "<div></div>";
+    const subtitle = dest.location || dest.region || "";
 
     return `
       <div class="card bg-base-100 shadow-sm hover:shadow-xl border border-base-200 overflow-hidden group">
@@ -129,11 +235,12 @@
           <div class="flex justify-between items-start gap-2">
             <div>
               <h3 class="font-bold text-lg leading-tight">${escapeHtml(dest.title)}</h3>
-              ${dest.location ? `<p class="text-sm text-neutral-500">${escapeHtml(dest.location)}</p>` : ""}
+              ${subtitle ? `<p class="text-sm text-neutral-500">${escapeHtml(subtitle)}</p>` : ""}
             </div>
             ${rating}
           </div>
-          <p class="text-sm text-neutral-600 line-clamp-2 mt-2">${escapeHtml(dest.description || "No description available.")}</p>
+          <p class="text-sm text-neutral-600 line-clamp-3 mt-2">${escapeHtml(dest.description || "No description available.")}</p>
+          ${cardDetailsHtml(dest)}
           ${tags}
           <div class="card-actions justify-between items-center mt-6">
             ${duration}
@@ -146,9 +253,11 @@
 
   function createListItem(dest) {
     const img = escapeAttr(dest.image);
-    const price = dest.price != null
-      ? `<div class="text-2xl font-semibold text-primary">$${dest.price}</div>`
-      : "";
+    const price = dest.priceLabel
+      ? `<div class="text-xl font-semibold text-primary">${escapeHtml(dest.priceLabel)}</div>`
+      : dest.price != null
+        ? `<div class="text-2xl font-semibold text-primary">$${dest.price}</div>`
+        : "";
     const duration = dest.duration
       ? `<div class="text-xs text-neutral-500">${escapeHtml(dest.duration)}</div>`
       : "";
@@ -158,6 +267,7 @@
     const tags = dest.tags.length
       ? `<div class="flex gap-1">${dest.tags.map((tag) => `<span class="text-xs badge badge-neutral">${escapeHtml(tag)}</span>`).join("")}</div>`
       : "";
+    const subtitle = dest.location || dest.region || "";
 
     return `
       <div class="flex flex-col sm:flex-row gap-6 bg-base-100 border border-base-200 rounded-3xl p-4 hover:shadow-md transition-all">
@@ -167,14 +277,15 @@
           <div class="flex justify-between gap-4">
             <div>
               <h3 class="font-bold text-xl">${escapeHtml(dest.title)}</h3>
-              ${dest.location ? `<p class="text-neutral-500">${escapeHtml(dest.location)}</p>` : ""}
+              ${subtitle ? `<p class="text-neutral-500">${escapeHtml(subtitle)}</p>` : ""}
             </div>
             <div class="text-right shrink-0">
               ${price}
               ${duration}
             </div>
           </div>
-          <p class="flex-1 text-neutral-600 mt-2">${escapeHtml(dest.description || "No description available.")}</p>
+          <p class="flex-1 text-neutral-600 mt-2 line-clamp-3">${escapeHtml(dest.description || "No description available.")}</p>
+          ${cardDetailsHtml(dest)}
           <div class="flex flex-wrap items-center justify-between gap-3 mt-auto pt-3">
             <div class="flex items-center gap-4">
               ${rating}
@@ -265,19 +376,12 @@
   }
 
   function filterResults() {
-    const searchTerm = ($("searchInput")?.value || "").toLowerCase().trim();
     const monthFilter = $("monthFilter")?.value || "";
 
+    // Local filters only (type / budget / month / sort). The search input is the
+    // agent query, not a substring match against card titles — applying it emptied
+    // the grid after NL searches like "Nearest hotels to Paris airports".
     let filtered = destinations;
-
-    if (searchTerm) {
-      filtered = filtered.filter((dest) =>
-        dest.title.toLowerCase().includes(searchTerm) ||
-        dest.location.toLowerCase().includes(searchTerm) ||
-        dest.description.toLowerCase().includes(searchTerm) ||
-        dest.tags.some((tag) => tag.toLowerCase().includes(searchTerm))
-      );
-    }
 
     if (activeFilters.length > 0) {
       filtered = filtered.filter((dest) => dest.type.some((t) => activeFilters.includes(t)));
@@ -387,7 +491,13 @@
       chatId = data.chat_id;
       hasSearched = true;
       destinations = (data.results || []).map(normalizeResult);
-      showSummary(data.answer || "");
+      // Prefer a short summary; full markdown answer is still in the debug/trace panel.
+      const summary =
+        (data.structured_answer && (data.structured_answer.context || data.structured_answer.tip)) ||
+        (destinations.length
+          ? `Found ${destinations.length} matching place${destinations.length === 1 ? "" : "s"}.`
+          : data.answer || "");
+      showSummary(summary);
       filterResults();
 
       if (typeof window.appendTraceCard === "function") {
@@ -405,10 +515,6 @@
     $("search-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
       performSearch();
-    });
-
-    $("searchInput")?.addEventListener("input", () => {
-      if (hasSearched) filterResults();
     });
 
     document.querySelectorAll(".filter-btn").forEach((btn) => {
