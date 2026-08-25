@@ -8,25 +8,26 @@
 ## 1. Overview
 
 - **Purpose**: Run the travel demo's Zeus agent loop via the published Python client from [koten-ai/zeus_client_python](https://github.com/koten-ai/zeus_client_python) instead of a copied vendor tree.
-- **Scope**: Agent loop (`run_agent`), config load, auth, catalog discovery, HTTP client lifecycle. Excludes the upstream FastAPI sample UI (`python3/main.py` equivalent).
+- **Scope**: Agent loop (`ZeusRuntime.agent.run_turn`), config mapping, auth, catalog discovery, HTTP client lifecycle. Excludes the upstream sample UI.
 - **Entry points**:
-  - `travel_planner.zeus_config.configure_zeus_client()` — sets env vars before `zeus_client` import
-  - `travel_planner.search.run_search()` — travel-specific wrapper around `zeus_client.run_agent()`
+  - `travel_planner.zeus_config.configure_paths()` — sets env vars before runtime bind
+  - `travel_planner.search.run_search()` — travel-specific wrapper around `rt.agent.run_turn()`
   - `travel_planner.chat_store` — local multi-turn persistence (not in upstream package)
   - `travel_planner.tool_order` — `/api/tool-order` for trace panel chart axes
+- **Status note**: V1 `run_agent` / `init_http` paths were removed. Client in use is **2.3.0** (boot gate: 2.3.x family). See `.grok/guides/ZEUS_CLIENT_V2_BFF.md`.
 
 ## 2. Architecture & Flow
 
 - **High-level flow**:
   1. `import travel_planner` calls `configure_zeus_client()` (sets `ZEUS_CLIENT_CONFIG_DIR`, `ZEUS_CHAT_REQUESTS_DIR`, `CHAT_LOG_PATH`).
-  2. Flask `create_app()` → `startup()` → `zeus_client.init_http()` + `load_chats_from_jsonl()`.
-  3. `POST /api/search` → `run_search()` → `zeus_client.run_agent()` with `travel_booking` mode.
+  2. Flask `create_app()` → `startup()` → `build_runtime()` + optional `rt.catalog.sync()` + `load_chats_from_jsonl()`.
+  3. `POST /api/search` → `run_search()` → `rt.agent.run_turn()` with `travel_booking` mode.
   4. Catalog resolved from `data/chat_requests/` via `ZEUS_CHAT_REQUESTS_DIR`.
   5. Chat state persisted to `data/chats.jsonl` via local `chat_store`.
 
-- **Import-order constraint**: `zeus_client.constants` reads env vars at import time. Never import `zeus_client` before `configure_zeus_client()` runs. The package `__init__.py` handles this automatically.
+- **Import-order constraint**: Path env vars are set in `travel_planner.__init__` via `configure_paths()` before Flask builds the runtime.
 
-- **Config normalization**: `zeus_client.load_config()` accepts legacy `zeus_connections` + `providers` shapes from `config.example.json` and normalizes in memory to `zeus` + `llm_provider`. Use `resolve_llm_provider_config(cfg)` and `resolve_zeus_config(cfg)` in application code.
+- **Config mapping**: Nested `config.json` (`zeus`, `llm_provider`, `samples`, `default_mode`) is mapped to `RuntimeConfig` in `runtime_factory.py`. Inline secrets go into `OverlaySecretStore`, not onto the config object.
 
 - **Key components**:
   - `src/travel_planner/zeus_config.py` — env-based path configuration
@@ -36,7 +37,7 @@
   - `data/chat_requests/by_use_case/chat_request_travel_booking_v2.json` — travel mode catalog
   - `kotenai-zeus-client` (PyPI) — upstream agent library
 
-- **Data flow**: `config.json` → `load_config()` → `run_agent(..., structured=True, output_schema=DEMO_OUTPUT_SCHEMA)` → Zeus V2 dispatch → filtered `zeus_data` + answer → `results_parser` / `answer_parser`
+- **Data flow**: `config.json` → `build_runtime()` → `rt.agent.run_turn(...)` → Zeus V2 dispatch → `turn_mapper` allowlist + `results_parser` / `answer_parser`
 - **Structured rows**: See `.grok/guides/DEMO_OUTPUT_SCHEMA.md` for the app-owned allowlist that keeps card fields only.
 
 - **Dependencies**: `kotenai-zeus-client` from sibling `../zeus_client_python` (path dep in `pyproject.toml`; GitHub repo is private / not yet on PyPI under this name)
@@ -71,19 +72,21 @@
 - **Refreshing catalogs from Zeus** (optional):
   ```python
   import asyncio
-  from zeus_client import ZeusClient, load_config, sync_chat_requests
+  from travel_planner.runtime_factory import build_runtime
 
   async def sync():
-      async with ZeusClient():
-          cfg = await load_config()
-          result = await sync_chat_requests(cfg)
+      rt = build_runtime()
+      try:
+          result = await rt.catalog.sync()
           print(result.synced)
+      finally:
+          await rt.aclose()
 
   asyncio.run(sync())
   ```
-  Synced files land under `ZEUS_CHAT_REQUESTS_DIR` (or `~/.config/zeus_client/chat_requests` if unset).
+  Synced files land under `ZEUS_CHAT_REQUESTS_DIR`.
 
-- **Upgrading the client**: Bump `kotenai-zeus-client` version in `pyproject.toml` and `requirements.txt`, then `pip install -e .`.
+- **Upgrading the client**: Keep sibling `../zeus_client_python` on **2.3.0** (2.3.x family), then `pip install -e ".[dev]"`. `GET /api/health` must report `zeus_client_version` `2.3.0` (prefix `2.3`). The search UI prints `v{{ zeus_client_version }}` from the imported package, not `config.json` `build_version`.
 
 - **Limitations**: Chat store and tool-order metrics are demo-local; not exported by `kotenai-zeus-client`.
 
@@ -91,15 +94,16 @@
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| `no chat_request file for mode 'travel_booking'` | Catalog missing | Restore `data/chat_requests/by_use_case/chat_request_travel_booking_v2.json` or run `sync_chat_requests` |
-| `llm_provider has no api_key` | Empty key after normalization | Set `llm_provider.api_key` or legacy `providers.<id>.api_key` |
+| `catalog not found for mode='travel_booking'` | Catalog missing | Restore `data/chat_requests/` snapshots or enable `chat_requests_sync.on_startup` |
+| `llm api_key missing` | Empty key in overlay + env | Set `llm_provider.api_key` or `XAI_API_KEY` |
 | Config read from wrong path | `ZEUS_CLIENT_CONFIG_DIR` unset or import order wrong | Ensure `import travel_planner` runs before direct `zeus_client` imports |
 | `no Zeus URL configured` | Missing `zeus.url` | Fill `config.json` Zeus connection |
 | Wrong catalog loaded | Stale sync dir | Check `ZEUS_CHAT_REQUESTS_DIR` points at `data/chat_requests` |
 | `[WARN] zeus_data: entity_type unknown…` / `zeus_data=0` after successful find+get | Structured extractor took last tool (`get`) without `entity_type` | Fixed in local `zeus_client` (`agent/response.py` infers from prior find/search or row field). See `.grok/guides/DEMO_OUTPUT_SCHEMA.md` |
 | Runtime audit hash drift / session `none` | See `.grok/guides/ANALYTICS_CONTRACT_DRIFT.md` | Align catalog stamp + `scope_contracts`; Docker URL `host.docker.internal`; basic auth; `/v2/session` |
 | `All connection attempts failed` to Zeus from Compose | `localhost:8080` inside container | Set `zeus.url` / `ZEUS_URL` to `http://host.docker.internal:8080` |
-| Session create `404` | Client still on `/v1/session` (pre ZE-35) | Upgrade `kotenai-zeus-client` or rely on `patch_durable_session_v2_routes` |
+| Session create `404` | Client still on `/v1/session` (pre ZE-35) | Use `kotenai-zeus-client` 2.3.x (`/v2/session` is library-owned; no local monkeypatch) |
+| `kotenai-zeus-client 2.3.x required` | Sibling checkout older than 2.3 | Update `../zeus_client_python` and reinstall |
 
 - **Debug checklist**:
   - [ ] `echo $ZEUS_CLIENT_CONFIG_DIR` / verify `config.json` location
@@ -128,3 +132,6 @@
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-07-07 | agent | Initial guide: replaced vendored `vendor/python3` with `kotenai-zeus-client` pip package |
+| 2026-08-21 | agent | BFF now uses `ZeusRuntime` (see `ZEUS_CLIENT_V2_BFF.md`); this guide kept for setup/env |
+| 2026-08-21 | agent | Require client 2.3.x; drop `/v1/session` monkeypatch troubleshooting |
+| 2026-08-25 | Grok | UI + docs pin the in-use sibling as **2.3.0** (`zeus_client.__version__`); family gate stays `2.3` |

@@ -4,7 +4,17 @@ from __future__ import annotations
 import json
 from typing import Any
 
-NAME_KEYS = ("name", "title", "destination", "destination_name", "city", "location")
+NAME_KEYS = (
+    "name",
+    "airportname",
+    "title",
+    "destination",
+    "destination_name",
+    "city",
+    "location",
+    "faa",
+    "icao",
+)
 DESC_KEYS = ("description", "summary", "brief", "overview", "body", "snippet")
 IMAGE_KEYS = ("image", "image_url", "photo", "thumbnail", "picture", "img", "cover_image")
 # Fields that sometimes hold a full hotel/destination document as JSON or nested dict.
@@ -12,8 +22,93 @@ BLOB_KEYS = DESC_KEYS + ("content", "document", "payload", "data", "source", "va
 PRICE_KEYS = ("price", "price_range", "rate")
 URL_KEYS = ("url", "website", "link", "homepage")
 ADDRESS_KEYS = ("address", "location")
+IDENTITY_KEYS = (
+    "name",
+    "airportname",
+    "title",
+    "destination",
+    "destination_name",
+    "faa",
+    "icao",
+    "id",
+    "doc_key",
+)
+_PLACE_ONLY_KEYS = frozenset({"city", "state", "country"})
+_FILTER_ONLY_KEYS = frozenset({"where", "predicates", "limit", "offset", "return"})
+_SKIP_WALK_KEYS = frozenset(
+    {
+        "job_fingerprint",
+        "meta",
+        "decomposition",
+        "query_decomposition",
+        "provenance",
+        "entity_refs",
+        "node_refs",
+        "step_costs",
+        "wish_i_knew",
+    }
+)
+_SPECIAL_LIST_KEYS = (
+    "rows",
+    "items",
+    "results",
+    "data",
+    "destinations",
+    "matches",
+    "nodes",
+)
 
 MAX_RESULTS = 20
+
+
+def is_product_row(row: Any) -> bool:
+    """True for Hotel/Airport/destination docs — not find-where or predicates."""
+    if not isinstance(row, dict) or not row:
+        return False
+    keys = set(row)
+    if keys <= _PLACE_ONLY_KEYS or keys <= _FILTER_ONLY_KEYS:
+        return False
+    if keys <= (_PLACE_ONLY_KEYS | _FILTER_ONLY_KEYS):
+        return False
+    if any(row.get(k) not in (None, "") for k in IDENTITY_KEYS):
+        return True
+    if _first_str(row, ("city", "location")) and _first_str(row, DESC_KEYS):
+        return True
+    return False
+
+
+def infer_entity_type(row: Any) -> str:
+    """Stamp Hotel/Airport/Destination from explicit type or identifying fields."""
+    if not isinstance(row, dict):
+        return "Destination"
+    explicit = row.get("entity_type") or row.get("type")
+    if isinstance(explicit, str) and explicit.strip():
+        raw = explicit.strip()
+        for known in ("Hotel", "Airport", "Destination"):
+            if raw.lower() == known.lower():
+                return known
+        return raw[:1].upper() + raw[1:]
+    if any(row.get(k) not in (None, "") for k in ("airportname", "faa", "icao")):
+        return "Airport"
+    if any(row.get(k) not in (None, "") for k in ("name", "title")):
+        return "Hotel"
+    return "Destination"
+
+
+def prefer_hotel_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hotel cards first so a mixed airport+hotel pipeline does not cap as airports."""
+    hotels: list[dict[str, Any]] = []
+    rest: list[dict[str, Any]] = []
+    airports: list[dict[str, Any]] = []
+    for row in rows:
+        et = infer_entity_type(row)
+        if et == "Hotel":
+            hotels.append(row)
+        elif et == "Airport":
+            airports.append(row)
+        else:
+            rest.append(row)
+    return hotels + rest + airports
 
 
 def _first_str(row: dict, keys: tuple[str, ...]) -> str:
@@ -116,11 +211,13 @@ def _normalize_row(row: Any) -> dict[str, str] | None:
         return None
 
     row = _merge_blob_into_row(row)
+    if not is_product_row(row):
+        return None
 
     # Prefer proper hotel name over geo titles like "Paris/18th arrondissement".
-    name = _first_str(row, ("name", "destination", "destination_name"))
+    name = _first_str(row, ("name", "airportname", "destination", "destination_name"))
     if not name:
-        name = _first_str(row, ("title", "city", "location"))
+        name = _first_str(row, ("title", "city", "location", "faa", "icao"))
     if not name or _is_json_blob_text(name):
         return None
 
@@ -143,10 +240,19 @@ def _normalize_row(row: Any) -> dict[str, str] | None:
     if address:
         card["address"] = address
 
-    for key in ("city", "state", "country"):
+    for key in ("city", "state", "country", "faa", "icao"):
         val = _first_str(row, (key,))
         if val:
             card[key] = val
+
+    if not description:
+        extras = []
+        if card.get("faa"):
+            extras.append(f"FAA {card['faa']}")
+        if card.get("icao"):
+            extras.append(f"ICAO {card['icao']}")
+        description = ", ".join(extras)
+        card["description"] = description
 
     price = _first_str(row, PRICE_KEYS)
     if price:
@@ -167,17 +273,23 @@ def _normalize_row(row: Any) -> dict[str, str] | None:
 def _collect_arrays(obj: Any, found: list) -> None:
     if isinstance(obj, list):
         for item in obj:
-            if isinstance(item, dict):
+            if isinstance(item, dict) and is_product_row(item):
                 found.append(item)
+            elif isinstance(item, (dict, list)):
+                _collect_arrays(item, found)
         return
     if not isinstance(obj, dict):
         return
-    for key in ("rows", "items", "results", "data", "destinations", "matches", "nodes"):
+    for key in _SPECIAL_LIST_KEYS:
         val = obj.get(key)
         if isinstance(val, list):
             for item in val:
-                if isinstance(item, dict):
+                if isinstance(item, dict) and is_product_row(item):
                     found.append(item)
+                elif isinstance(item, (dict, list)):
+                    _collect_arrays(item, found)
+        elif isinstance(val, dict):
+            _collect_arrays(val, found)
     for key in ("return", "output"):
         val = obj.get(key)
         if isinstance(val, dict):
@@ -189,16 +301,32 @@ def _collect_arrays(obj: Any, found: list) -> None:
         for step_val in steps.values():
             if isinstance(step_val, dict):
                 _collect_arrays(step_val, found)
+    # Pipeline `data` holds `as` bindings (hotel_rows, airport_info) beside meta.
+    for key, val in obj.items():
+        if key in _SKIP_WALK_KEYS or key in _SPECIAL_LIST_KEYS or key in {
+            "return",
+            "output",
+            "steps",
+            "status",
+        }:
+            continue
+        if isinstance(val, (dict, list)):
+            _collect_arrays(val, found)
 
 
 def _rows_from_tool_call(rec: dict) -> list[dict]:
     rows: list[dict] = []
     parsed = rec.get("result_json")
+    if isinstance(parsed, str):
+        parsed = _try_parse_json_obj(parsed)
     if isinstance(parsed, dict):
         _collect_arrays(parsed, rows)
     if rows:
         return rows
-    raw = rec.get("result_text") or rec.get("result") or ""
+    raw = rec.get("result_text") or rec.get("result") or rec.get("snippet") or rec.get("body") or ""
+    if isinstance(raw, dict):
+        _collect_arrays(raw, rows)
+        return rows
     if not raw:
         return rows
     try:
@@ -230,15 +358,28 @@ def zeus_data_to_results(zeus_data: list[dict] | None) -> list[dict[str, str]]:
     return results
 
 
+def _hop_records(trace: dict) -> list[dict]:
+    """V1 tool_calls plus V2 public_trace hops/steps."""
+    records: list[dict] = []
+    for key in ("tool_calls", "hops", "steps"):
+        items = trace.get(key)
+        if not isinstance(items, list):
+            continue
+        for rec in items:
+            if isinstance(rec, dict):
+                records.append(rec)
+    return records
+
+
 def extract_destinations(trace: dict | None) -> list[dict[str, str]]:
-    """Walk trace tool_calls and return normalized destination cards."""
+    """Walk trace tool_calls/hops/steps and return normalized destination cards."""
     if not trace:
         return []
 
     seen: set[str] = set()
     results: list[dict[str, str]] = []
 
-    for rec in trace.get("tool_calls") or []:
+    for rec in _hop_records(trace):
         for row in _rows_from_tool_call(rec):
             card = _normalize_row(row)
             if not card:

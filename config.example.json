@@ -1,6 +1,6 @@
 {
   "build_version": "",
-  "_comment": "Travel planner config. Copy to config.json and fill in your keys.",
+  "_comment": "Travel planner config. Copy to config.json and fill in your keys. Nested zeus/llm_provider/samples stay valid. session.semantic_cache.enabled needs Zeus >= 0.7.6; leave false unless you opt in. The search UI version stamp is the installed kotenai-zeus-client (2.3.0), not build_version.",
 
   "zeus": {
     "url": "http://host.docker.internal:8080",
@@ -43,6 +43,20 @@
     "scopes": "from_contracts",
     "modes": ["travel_booking", "analytics"],
     "on_startup": true
+  },
+
+  "profile": "development",
+  "settings": {
+    "mode": "travel_booking",
+    "ai_process_result": false,
+    "durable_sessions": true,
+    "max_rounds": 12,
+    "ignore_user_tool_path_hints": true
+  },
+  "session": {
+    "semantic_cache": {
+      "enabled": false
+    }
   },
 
   "default_api_version": "v2",

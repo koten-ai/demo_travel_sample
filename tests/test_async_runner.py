@@ -1,62 +1,70 @@
-"""Tests for async_runner startup sync."""
+"""Tests for async_runner startup catalog sync (V2)."""
+
+from __future__ import annotations
+
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
-from travel_planner.async_runner import _sync_chat_requests_on_startup
+from travel_planner.async_runner import _startup_async
 
 
-@pytest.mark.parametrize(
-    "on_startup",
-    [False, None, 0, ""],
-)
+@pytest.mark.parametrize("on_startup", [False, None, 0, ""])
 def test_sync_on_startup_skipped_when_disabled(monkeypatch, on_startup):
-    called: list[object] = []
+    called: list[str] = []
 
-    def fake_run_coro(coro, timeout=600):
-        called.append(coro)
-        return asyncio.run(coro)
+    async def fake_sync():
+        called.append("sync")
+        return SimpleNamespace(synced=[], skipped=[], errors=[])
 
-    monkeypatch.setattr("travel_planner.async_runner.run_coro", fake_run_coro)
+    monkeypatch.setattr(
+        "travel_planner.runtime_factory.load_app_config_dict",
+        lambda: {"chat_requests_sync": {"on_startup": on_startup}},
+    )
+    monkeypatch.setattr(
+        "travel_planner.chat_store.load_chats_from_jsonl",
+        lambda: None,
+    )
 
-    cfg = {"chat_requests_sync": {"on_startup": on_startup}}
-    _sync_chat_requests_on_startup(cfg)
-
+    rt = SimpleNamespace(catalog=SimpleNamespace(sync=fake_sync))
+    asyncio.run(_startup_async(rt))
     assert called == []
 
 
 def test_sync_on_startup_runs_when_enabled(monkeypatch):
-    captured: list[dict] = []
+    called: list[str] = []
 
-    async def fake_sync(cfg):
-        captured.append(cfg)
-        from zeus_client.zeus.sync import SyncResult
+    async def fake_sync():
+        called.append("sync")
+        return SimpleNamespace(synced=[{"mode": "travel_booking"}], skipped=[], errors=[])
 
-        return SyncResult(synced=[{"mode": "travel_booking"}])
+    monkeypatch.setattr(
+        "travel_planner.runtime_factory.load_app_config_dict",
+        lambda: {"chat_requests_sync": {"on_startup": True}},
+    )
+    monkeypatch.setattr(
+        "travel_planner.chat_store.load_chats_from_jsonl",
+        lambda: None,
+    )
 
-    monkeypatch.setattr("zeus_client.sync_chat_requests", fake_sync)
-
-    def fake_run_coro(coro, timeout=600):
-        return asyncio.run(coro)
-
-    monkeypatch.setattr("travel_planner.async_runner.run_coro", fake_run_coro)
-
-    cfg = {"chat_requests_sync": {"on_startup": True}}
-    _sync_chat_requests_on_startup(cfg)
-
-    assert captured == [cfg]
+    rt = SimpleNamespace(catalog=SimpleNamespace(sync=fake_sync))
+    asyncio.run(_startup_async(rt))
+    assert called == ["sync"]
 
 
 def test_sync_on_startup_logs_and_continues_on_failure(monkeypatch):
-    async def failing_sync(cfg):
+    async def failing_sync():
         raise RuntimeError("zeus unreachable")
 
-    monkeypatch.setattr("zeus_client.sync_chat_requests", failing_sync)
+    monkeypatch.setattr(
+        "travel_planner.runtime_factory.load_app_config_dict",
+        lambda: {"chat_requests_sync": {"on_startup": True}},
+    )
+    monkeypatch.setattr(
+        "travel_planner.chat_store.load_chats_from_jsonl",
+        lambda: None,
+    )
 
-    def fake_run_coro(coro, timeout=600):
-        return asyncio.run(coro)
-
-    monkeypatch.setattr("travel_planner.async_runner.run_coro", fake_run_coro)
-
-    cfg = {"chat_requests_sync": {"on_startup": True}}
-    _sync_chat_requests_on_startup(cfg)
+    rt = SimpleNamespace(catalog=SimpleNamespace(sync=failing_sync))
+    asyncio.run(_startup_async(rt))

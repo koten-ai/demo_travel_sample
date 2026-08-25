@@ -5,7 +5,7 @@ services:
       dockerfile: demo_travel_sample/Dockerfile
     container_name: travel-planner
     ports:
-      - "5000:5000"
+      - "5050:5000"
     environment:
       ENVIRONMENT: dev
       # Reach Zeus on the host from this container (matches config.example.json).
@@ -22,6 +22,8 @@ services:
       - ./src/travel_planner/static:/app/src/travel_planner/static
       - ./src/travel_planner:/app/src/travel_planner
       - ./data/chat_requests:/app/data/chat_requests
+      # Live sibling SDK (pipeline XML recovery). Restart the container after client edits.
+      - ../zeus_client_python:/opt/zeus_client_python
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped

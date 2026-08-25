@@ -8,7 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.10/dist/full.min.css" rel="stylesheet" type="text/css" />
   <style>
     #searchInput {
-      width: 650px;
+      width: 100%;
     }
   </style>
   <link rel="stylesheet" href="/static/app.css" />
@@ -44,22 +44,27 @@
   </div>
 
   <!-- Hero Search -->
-  <div class="hero hero-bg h-[380px] text-white">
-    <div class="hero-content text-center max-w-3xl mx-auto px-6">
+  <div class="hero hero-bg min-h-[480px] py-12 text-white">
+    <div class="hero-content text-center w-full max-w-6xl mx-auto px-6">
       <div class="w-full">
         <h1 class="text-5xl font-bold mb-2 tracking-tight">Where to next?</h1>
         <p class="text-lg mb-8 opacity-90">Find your perfect adventure with AI-powered search</p>
 
-        <div class="relative max-w-2xl mx-auto">
+        <div class="search-box relative mx-auto">
           <form id="search-form" class="relative">
-            <input
-              id="searchInput" type="text" placeholder="Search destinations, activities, cities... (e.g. beach, Tokyo, hiking)"
-              class="search-input input input-lg w-full pr-16 bg-white/95 text-neutral-900 placeholder:text-neutral-500 focus:outline-none text-base rounded-3xl ai-style-change-2"
-              autocomplete="off">
+            <textarea
+              id="searchInput"
+              name="query"
+              rows="3"
+              placeholder="Describe your trip — destinations, dates, budget, activities…&#10;(e.g. 4 days in Tokyo, mid-range hotels near Shibuya, vegetarian food)"
+              class="search-input textarea w-full bg-white/95 text-neutral-900 placeholder:text-neutral-500 focus:outline-none text-base rounded-3xl border-0"
+              autocomplete="off"
+              aria-label="Travel search prompt"
+            ></textarea>
             <button
               type="submit"
               id="search-btn"
-              class="btn btn-primary btn-circle absolute right-2 top-1/2 -translate-y-1/2"
+              class="btn btn-primary btn-circle absolute right-3 bottom-3"
               aria-label="Search"
             >
               <span id="search-btn-icon">
@@ -67,11 +72,17 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 01-14 0 7 7 0 0114 0z" />
                 </svg>
               </span>
-              <span id="search-btn-spinner" class="loading loading-spinner loading-sm hidden"></span>
+              <span id="search-btn-cancel" class="search-btn-busy hidden" aria-hidden="true">
+                <svg class="search-btn-ring" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle class="search-btn-ring-track" cx="12" cy="12" r="9" />
+                  <circle class="search-btn-ring-arc" cx="12" cy="12" r="9" />
+                </svg>
+                <span class="search-btn-stop"></span>
+              </span>
             </button>
           </form>
           <div class="text-xs opacity-70 mt-3 text-center">
-            Powered by Zeus • Full-text AI search{% if build_version %} • v{{ build_version }}{% endif %}
+            Enter to search • Shift+Enter for a new line • Powered by Zeus{% if zeus_client_version %} • v{{ zeus_client_version }}{% endif %}
           </div>
         </div>
       </div>
@@ -184,8 +195,11 @@
   <script>
     window.ZeusTraceConfig = {
       toolOrder: {{ tool_order | tojson }},
+      hubBaseUrl: "http://127.0.0.1:9091",
     };
   </script>
-  <script src="/static/zeus_client_chat_trace.js" async></script>
+  <!-- Pinned zeus_client_chat_trace@1.0.0 (vendored). Re-copy with scripts/vendor_trace.sh. -->
+  <script src="https://koten-static-cdn.nyc3.cdn.digitaloceanspaces.com/zeus_client_chat_trace/latest/zeus_client_chat_trace.js"
+    async></script>
 </body>
 </html>

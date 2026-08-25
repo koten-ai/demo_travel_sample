@@ -10,27 +10,25 @@
 - **Scope**: Client-side filtering after the agent turn. Does not change Zeus tool HTTP payloads the LLM sees.
 - **Entry points**:
   - `travel_planner.output_schema.DEMO_OUTPUT_SCHEMA`
-  - `travel_planner.search._search_async` → `run_agent(..., output_schema=DEMO_OUTPUT_SCHEMA)`
-  - Downstream: `zeus_data_to_results(structured.zeus_data)`
+  - `travel_planner.turn_mapper.filter_row_by_schema` after `rt.agent.run_turn`
+  - Downstream: `zeus_data_to_results(...)` in the card waterfall
 
 ## 2. Architecture & Flow
 - **High-level flow**:
   1. User search → `run_search` / `_search_async`
-  2. `run_agent(..., structured=True, output_schema=DEMO_OUTPUT_SCHEMA)`
-  3. Client extracts last successful data-tool rows and filters keys per entity type
+  2. `rt.agent.run_turn(...)`
+  3. BFF extracts hop/tool rows from `TurnResult.debug.public_trace` and filters keys per entity type
   4. App maps filtered rows → UI cards via `zeus_data_to_results`
 - **Key components**:
   - `src/travel_planner/output_schema.py` — allowlist for Hotel / Destination / Airport
-  - `src/travel_planner/search.py` — passes schema into the agent
+  - `src/travel_planner/turn_mapper.py` — applies the allowlist to hop rows
+  - `src/travel_planner/search.py` — runs the card waterfall after `run_turn`
   - `src/travel_planner/results_parser.py` — normalizes rows to card fields; unwraps JSON hotel blobs in `description`
-  - `zeus_client.agent.response.extract_structured_response` — applies allowlist
 - **Data flow**: tool result rows → allowlist filter → `zeus_data` → destination cards
-- **Dependencies**: `kotenai-zeus-client` with `structured=True` + `output_schema` support
+- **Dependencies**: `kotenai-zeus-client` **2.3.x**. Allowlist is **app-owned** in `turn_mapper` — not a `run_turn` kwarg.
 
-### Allowlist precedence (client)
-1. `output_schema` argument (this demo) — **wins**
-2. `guidance.injections.output_schema` in chat_request
-3. Live MINI-SCHEMA from scope brief
+### Allowlist (BFF-owned)
+`DEMO_OUTPUT_SCHEMA` is applied after `rt.agent.run_turn` in `turn_mapper.filter_row_by_schema`. G2 keys (`wish_i_knew`, jailbreak scores, detective) are stripped even if a row contains them. Pack `response_output_schema.json` stays Zeus/chat_request SoT for Layer A terminate — this allowlist is only for destination **cards**.
 
 Reserved always kept: `id`, `doc_key`, `entity_type`.
 
@@ -51,7 +49,7 @@ Reserved always kept: `id`, `doc_key`, `entity_type`.
 - **Edge cases**:
   - Entity type missing from schema → empty `zeus_data` for that type; app falls back to `extract_destinations(trace)` then answer parser
   - Extra backend keys (`hotel_details`, `job_fingerprint`, `meta`, `status`) are dropped; client may still log `[WARN] zeus_data: dropped unknown field …` — expected soft noise, not a contract failure
-- **Limitations**: Schema does not slim tool results sent to the LLM mid-loop; only final structured `zeus_data`.
+- **Limitations**: Schema does not slim tool results sent to the LLM mid-loop; only BFF card rows after the turn.
 
 ## 5. Debugging & Known Issues
 | Symptom | Likely Cause | Fix |
@@ -67,7 +65,7 @@ Reserved always kept: `id`, `doc_key`, `entity_type`.
 Agent turns often end with **`get`** after **`find`** (hydrate full docs by node id). Structured extraction uses the **last** successful data tool with rows. `get` does not take `entity_type`, so older clients left `entity_type=None`. With multi-key `DEMO_OUTPUT_SCHEMA` (Hotel / Destination / Airport), the single-entity override fallback does not apply, MINI-SCHEMA cannot resolve fields, allowlist is empty, and **`zeus_data` is cleared**. UI cards may still appear via markdown / `extract_destinations` fallback (`results=N` but `zeus_data=0` in logs).
 
 - **Debug checklist**:
-  - [ ] Confirm `search.py` passes `output_schema=DEMO_OUTPUT_SCHEMA`
+  - [ ] Confirm `turn_mapper.filter_row_by_schema` uses `DEMO_OUTPUT_SCHEMA`
   - [ ] Inspect `structured_response.zeus_data`, `.entity_type`, `.source_tool`, and `.warnings` on API response
   - [ ] If `source_tool=get` and `entity_type` is set, allowlist resolution should succeed
   - [ ] Run `pytest tests/test_output_schema.py`
@@ -76,7 +74,7 @@ Agent turns often end with **`get`** after **`find`** (hydrate full docs by node
 ## 6. Related Artifacts
 - **Files changed / owned by this feature**:
   - `src/travel_planner/output_schema.py` — allowlist definition
-  - `src/travel_planner/search.py` — wire into `run_agent`
+  - `src/travel_planner/turn_mapper.py` — BFF-owned allowlist filter
   - `tests/test_output_schema.py` — schema + filter tests
   - `.grok/plans/DEMO_OUTPUT_SCHEMA.md` — plan
 - **Tickets**: none
@@ -88,3 +86,5 @@ Agent turns often end with **`get`** after **`find`** (hydrate full docs by node
 | 2026-07-09 | agent | Unwrap JSON hotel docs from `description`; keep price/url/address on cards |
 | 2026-07-09 | agent | Document `entity_type unknown` on find→get; client now infers entity_type from prior tools / rows |
 | 2026-07-09 | agent | Initial guide: demo output_schema for cleaner zeus_data |
+| 2026-08-21 | agent | Allowlist applied in BFF `turn_mapper` (not a `run_turn` kwarg) |
+| 2026-08-21 | agent | Strip Layer A G2 keys from cards (`g2_not_in_ui`) |

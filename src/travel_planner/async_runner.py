@@ -1,13 +1,24 @@
-"""Background asyncio loop so Flask can call the zeus_client async stack."""
-import asyncio
+"""Background asyncio loop + process-scoped ZeusRuntime lifecycle."""
+
+from __future__ import annotations
+
 import atexit
+import asyncio
+import logging
 import threading
+from typing import TYPE_CHECKING
 
 from travel_planner.paths import PROJECT_ROOT
-from travel_planner.zeus_config import configure_zeus_client
+from travel_planner.zeus_config import configure_paths
+
+if TYPE_CHECKING:
+    from zeus_client import ZeusRuntime
+
+logger = logging.getLogger("travel_planner")
 
 _loop: asyncio.AbstractEventLoop | None = None
 _started = False
+_runtime: ZeusRuntime | None = None
 
 
 def _ensure_loop() -> asyncio.AbstractEventLoop:
@@ -33,63 +44,76 @@ def run_coro(coro, timeout: float = 600):
     return future.result(timeout=timeout)
 
 
-def _sync_chat_requests_on_startup(cfg: dict) -> None:
-    """Pull chat_request catalogs from Zeus when config enables on_startup."""
-    sync_cfg = cfg.get("chat_requests_sync") or {}
-    if not sync_cfg.get("on_startup"):
-        return
-
-    from zeus_client import logger, sync_chat_requests
-
-    try:
-        result = run_coro(sync_chat_requests(cfg))
-    except Exception as e:
-        logger.warning("startup chat_requests sync failed: %s", e)
-        return
-
-    if result.synced:
-        logger.info(
-            "startup chat_requests sync: updated %d catalog(s)",
-            len(result.synced),
-        )
-    if result.skipped:
-        logger.info(
-            "startup chat_requests sync: skipped %d unchanged catalog(s)",
-            len(result.skipped),
-        )
-    if result.errors:
-        logger.warning(
-            "startup chat_requests sync: %d error(s): %s",
-            len(result.errors),
-            result.errors,
-        )
+def get_runtime() -> ZeusRuntime:
+    if _runtime is None:
+        raise RuntimeError("runtime not started")
+    return _runtime
 
 
-def startup() -> None:
-    global _started
-    if _started:
-        return
-    _ensure_loop()
-    configure_zeus_client()
-    (PROJECT_ROOT / "data").mkdir(parents=True, exist_ok=True)
+def set_runtime_for_tests(rt: ZeusRuntime | None) -> None:
+    """Test helper — inject or clear the process-scoped runtime."""
+    global _runtime
+    _runtime = rt
 
-    from zeus_client import close_http, init_http, load_config
+
+async def _startup_async(rt: ZeusRuntime) -> None:
+    from travel_planner.runtime_factory import load_app_config_dict
+
+    raw = load_app_config_dict()
+    sync_cfg = raw.get("chat_requests_sync") or {}
+    if sync_cfg.get("on_startup"):
+        try:
+            result = await rt.catalog.sync()
+            synced = getattr(result, "synced", None) or []
+            skipped = getattr(result, "skipped", None) or []
+            errors = getattr(result, "errors", None) or []
+            if synced:
+                logger.info("startup catalog sync: updated %d catalog(s)", len(synced))
+            if skipped:
+                logger.info(
+                    "startup catalog sync: skipped %d unchanged catalog(s)",
+                    len(skipped),
+                )
+            if errors:
+                logger.warning(
+                    "startup catalog sync: %d error(s): %s",
+                    len(errors),
+                    errors,
+                )
+        except Exception as e:  # soft-fail like the previous V1 runner
+            logger.warning("startup catalog sync failed: %s", e)
 
     from travel_planner.chat_store import load_chats_from_jsonl
 
-    run_coro(init_http())
-    _sync_chat_requests_on_startup(run_coro(load_config()))
     load_chats_from_jsonl()
+
+
+def startup() -> None:
+    global _started, _runtime
+    if _started:
+        return
+    _ensure_loop()
+    configure_paths()
+    (PROJECT_ROOT / "data").mkdir(parents=True, exist_ok=True)
+
+    from travel_planner.runtime_factory import build_runtime
+
+    _runtime = build_runtime()
+    run_coro(_startup_async(_runtime))
     _started = True
 
 
 def shutdown() -> None:
+    global _started, _runtime
     if not _started:
         return
-    from zeus_client import close_http
-
+    rt = _runtime
+    _runtime = None
+    _started = False
+    if rt is None:
+        return
     try:
-        run_coro(close_http(), timeout=10)
+        run_coro(rt.aclose(), timeout=10)
     except Exception:
         pass
 

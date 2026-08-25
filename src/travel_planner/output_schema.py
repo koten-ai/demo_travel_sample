@@ -1,13 +1,9 @@
 """Concrete zeus_data allowlist for the travel demo.
 
-Passed as ``output_schema`` to ``run_agent`` so structured rows are filtered to
-fields this app actually maps into destination cards — not full document dumps
-or internal ingest metadata (e.g. ``job_fingerprint``, ``meta``, ``status``).
-
-Precedence in the Zeus client (highest first):
-1. This argument to ``run_agent``
-2. ``guidance.injections.output_schema`` in the chat_request
-3. Live MINI-SCHEMA from the scope brief
+Applied in ``turn_mapper.filter_row_by_schema`` after ``rt.agent.run_turn`` so
+structured rows keep fields this app maps into destination cards — not full
+document dumps or internal ingest metadata (e.g. ``job_fingerprint``, ``meta``,
+``status``). This is app-owned; it is not a Zeus client ``run_turn`` kwarg.
 """
 from __future__ import annotations
 

@@ -8,6 +8,7 @@
   let activeFilters = [];
   let activeBudget = null;
   let hasSearched = false;
+  let searchController = null;
 
   const TYPE_KEYWORDS = {
     beach: ["beach", "coast", "island", "tropical", "surf", "ocean", "sea"],
@@ -175,16 +176,51 @@
     return `<div class="mt-3 space-y-1">${lines.join("")}</div>`;
   }
 
-  function setLoading(busy) {
+  const SEARCH_INPUT_MAX_PX = 230;
+
+  function autosizeSearchInput() {
+    const el = $("searchInput");
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, SEARCH_INPUT_MAX_PX)}px`;
+  }
+
+  function searchQueryText() {
+    return ($("searchInput")?.value || "").trim();
+  }
+
+  function searchQueryLabel() {
+    return searchQueryText().replace(/\s+/g, " ");
+  }
+
+  function isSearchBusy() {
+    return searchController != null;
+  }
+
+  function setSearchBusy(busy) {
     const btn = $("search-btn");
     const icon = $("search-btn-icon");
-    const spinner = $("search-btn-spinner");
+    const cancel = $("search-btn-cancel");
     const input = $("searchInput");
     if (!btn || !input) return;
-    btn.disabled = busy;
     input.disabled = busy;
+    const label = busy ? "Cancel search" : "Search";
+    btn.setAttribute("aria-label", label);
+    btn.setAttribute("title", label);
+    $("search-form")?.setAttribute("aria-busy", busy ? "true" : "false");
+    btn.classList.toggle("is-cancel", busy);
+    btn.classList.toggle("btn-error", busy);
+    btn.classList.toggle("btn-primary", !busy);
     icon?.classList.toggle("hidden", busy);
-    spinner?.classList.toggle("hidden", !busy);
+    cancel?.classList.toggle("hidden", !busy);
+  }
+
+  function cancelSearch() {
+    const controller = searchController;
+    if (!controller) return;
+    searchController = null;
+    setSearchBusy(false);
+    controller.abort();
   }
 
   function showError(msg) {
@@ -327,7 +363,7 @@
     const listContainer = $("resultsList");
     const emptyState = $("emptyState");
     const noResultsState = $("noResultsState");
-    const query = $("searchInput")?.value.trim() || "";
+    const query = searchQueryLabel();
 
     if (!gridContainer || !listContainer) return;
 
@@ -458,7 +494,10 @@
   }
 
   function resetAll() {
-    if ($("searchInput")) $("searchInput").value = "";
+    if ($("searchInput")) {
+      $("searchInput").value = "";
+      autosizeSearchInput();
+    }
     resetFilters();
     if (!hasSearched) renderResults([]);
   }
@@ -471,16 +510,20 @@
   }
 
   async function performSearch() {
+    if (isSearchBusy()) return;
     hideError();
-    const query = ($("searchInput")?.value || "").trim();
+    const query = searchQueryText();
     if (!query) return;
 
-    setLoading(true);
+    const controller = new AbortController();
+    searchController = controller;
+    setSearchBusy(true);
     try {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, chat_id: chatId }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -505,17 +548,35 @@
         window.openDebugPanel?.();
       }
     } catch (err) {
+      if (err?.name === "AbortError" || controller.signal.aborted) {
+        return;
+      }
       showError(String(err));
     } finally {
-      setLoading(false);
+      if (searchController === controller) {
+        searchController = null;
+        setSearchBusy(false);
+      }
     }
   }
 
   function init() {
     $("search-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
+      if (isSearchBusy()) {
+        cancelSearch();
+        return;
+      }
       performSearch();
     });
+
+    $("searchInput")?.addEventListener("input", autosizeSearchInput);
+    $("searchInput")?.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      if (!isSearchBusy()) performSearch();
+    });
+    autosizeSearchInput();
 
     document.querySelectorAll(".filter-btn").forEach((btn) => {
       btn.addEventListener("click", () => toggleFilter(btn));

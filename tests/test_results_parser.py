@@ -34,6 +34,29 @@ def test_extract_destinations_empty_trace():
     assert extract_destinations({}) == []
 
 
+def test_extract_destinations_from_v2_hops():
+    trace = {
+        "hops": [
+            {
+                "verb": "find",
+                "result_json": {
+                    "rows": [
+                        {
+                            "name": "Kyoto",
+                            "description": "Temples and gardens",
+                            "image": "https://example.com/kyoto.jpg",
+                        }
+                    ]
+                },
+            }
+        ]
+    }
+    results = extract_destinations(trace)
+    assert len(results) == 1
+    assert results[0]["name"] == "Kyoto"
+    assert results[0]["image"] == "https://example.com/kyoto.jpg"
+
+
 def test_zeus_data_to_results_prefers_schema_filtered_rows():
     zeus_data = [
         {
@@ -55,6 +78,97 @@ def test_zeus_data_to_results_prefers_schema_filtered_rows():
 def test_zeus_data_to_results_empty_input():
     assert zeus_data_to_results(None) == []
     assert zeus_data_to_results([]) == []
+
+
+def test_airportname_rows_become_cards():
+    results = zeus_data_to_results(
+        [
+            {
+                "entity_type": "Airport",
+                "airportname": "San Francisco Intl",
+                "faa": "SFO",
+                "icao": "KSFO",
+                "city": "San Francisco",
+                "country": "United States",
+            }
+        ]
+    )
+    assert len(results) == 1
+    assert results[0]["name"] == "San Francisco Intl"
+    assert results[0]["city"] == "San Francisco"
+    assert "FAA SFO" in results[0]["description"]
+    assert results[0]["faa"] == "SFO"
+
+
+def test_extract_destinations_from_pipeline_hotel_rows_binding():
+    """Zeus pipeline `data.hotel_rows.rows` next to job_fingerprint is the live shape."""
+    trace = {
+        "hops": [
+            {
+                "name": "pipeline",
+                "result_json": {
+                    "data": {
+                        "hotel_rows": {
+                            "rows": [
+                                {
+                                    "name": "Kube Hotel",
+                                    "city": "Paris",
+                                    "country": "France",
+                                    "description": "Stylish and atmospheric",
+                                    "price": "€190-2,500",
+                                }
+                            ]
+                        },
+                        "job_fingerprint": {
+                            "algorithm": "md5",
+                            "canonical_bytes": 777,
+                            "server_md5": "md5:deadbeef",
+                        },
+                        "meta": {"steps_executed": 4, "status": "ok"},
+                        "status": "ok",
+                    },
+                    "decomposition": {"predicates": {"city": "Paris"}},
+                    "summary": "Hotels in Paris.",
+                    "turn_complete": True,
+                },
+            }
+        ]
+    }
+    results = extract_destinations(trace)
+    assert [r["name"] for r in results] == ["Kube Hotel"]
+    assert results[0]["city"] == "Paris"
+    assert results[0]["price"] == "€190-2,500"
+
+
+def test_city_only_predicates_are_not_cards():
+    results = zeus_data_to_results([{"city": "Paris"}])
+    assert results == []
+
+
+def test_extract_destinations_from_hop_snippet():
+    trace = {
+        "hops": [
+            {
+                "name": "pipeline",
+                "snippet": json.dumps(
+                    {
+                        "status": "ok",
+                        "rows": [
+                            {
+                                "airportname": "Los Angeles Intl",
+                                "faa": "LAX",
+                                "city": "Los Angeles",
+                                "country": "United States",
+                            }
+                        ],
+                    }
+                ),
+            }
+        ]
+    }
+    results = extract_destinations(trace)
+    assert len(results) == 1
+    assert results[0]["name"] == "Los Angeles Intl"
 
 
 def test_unwrap_json_blob_description_into_hotel_fields():

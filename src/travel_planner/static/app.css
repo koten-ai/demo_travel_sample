@@ -21,12 +21,86 @@ body {
   transform: scale(1.08);
 }
 
+/* 42rem (max-w-2xl) * 1.6 (prior +60% width) * 0.8 (20% smaller). */
+.search-box {
+  width: 100%;
+  max-width: calc(42rem * 1.6 * 0.8);
+}
+
 .search-input {
-  transition: all 0.3s ease;
+  width: 100%;
+  min-height: 8.8rem;
+  max-height: 14.4rem;
+  resize: none;
+  overflow-y: auto;
+  line-height: 1.5;
+  padding: 1.15rem 4.5rem 1.15rem 1.5rem;
+  scrollbar-width: thin;
+  transition: box-shadow 0.2s ease;
 }
 
 .search-input:focus {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+/* In-flight: spinner ring + stop square share the same circular button. */
+.search-btn-busy {
+  position: relative;
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-btn-busy.hidden {
+  display: none;
+}
+
+.search-btn-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 50%;
+  animation: search-btn-spin 0.75s linear infinite;
+}
+
+.search-btn-ring-track,
+.search-btn-ring-arc {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.25;
+}
+
+.search-btn-ring-track {
+  opacity: 0.28;
+}
+
+.search-btn-ring-arc {
+  stroke-linecap: round;
+  stroke-dasharray: 40 17;
+}
+
+.search-btn-stop {
+  position: relative;
+  z-index: 1;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 0.12rem;
+  background: currentColor;
+}
+
+@keyframes search-btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .search-btn-ring {
+    animation: none;
+  }
 }
 
 .debug-toggle-btn {
