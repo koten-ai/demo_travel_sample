@@ -9,7 +9,7 @@ Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, using [
 ## Features
 
 - **Natural-language search** — Ask for destinations by vibe, budget, region, or activity (e.g. *"warm beaches in Europe under $2000"*).
-- **LLM + Zeus agent loop** — An LLM orchestrates Zeus V2 verbs (`search`, `find`, `pipeline`, etc.) against the `travel-sample/_default` scope.
+- **LLM + Zeus agent loop** — An LLM orchestrates Zeus V2 verbs (`search`, `find`, `pipeline`, etc.) against the `travel-sample.inventory` scope.
 - **Destination cards** — Results are extracted from Zeus tool traces, with a markdown answer parser as fallback when the model returns prose instead of structured rows.
 - **Zeus trace panel** — Vendored **zeus_client_chat_trace 1.0.0** inspector (not CDN `latest`). Open the app with `?debug=true` and use the lightning toggle (bottom-left).
 - **Multi-provider LLM support** — Configure xAI Grok or OpenAI (extensible via `config.json`).
@@ -27,7 +27,7 @@ sequenceDiagram
 
     User->>Flask: POST /api/search {query}
     Flask->>Agent: run_search() → rt.agent.run_turn()
-    Agent->>LLM: travel_booking prompt + user query
+    Agent->>LLM: analytics catalog + user query
     LLM->>Zeus: V2 tool calls (search, find, pipeline…)
     Zeus-->>LLM: destination data
     LLM-->>Agent: answer + trace
@@ -36,14 +36,14 @@ sequenceDiagram
 ```
 
 1. The user submits travel preferences through the search UI.
-2. Flask calls `run_search()`, which loads the catalog and runs `rt.agent.run_turn()` in `travel_booking` mode.
+2. Flask calls `run_search()`, which loads the catalog and runs `rt.agent.run_turn()` in `analytics` mode.
 3. The LLM decides which Zeus tools to call and synthesizes a natural-language answer.
 4. The BFF maps `TurnResult` into destination cards (`results[]`); if hops are empty, `answer_parser` parses the markdown answer into structured JSON.
 5. The frontend renders cards and appends the trace to the debug panel.
 
 ## Prerequisites
 
-- **Zeus Engine** running and reachable, with the `travel-sample/_default` scope loaded
+- **Zeus Engine** running and reachable, with the `travel-sample.inventory` scope loaded
 - **LLM API key** — xAI Grok (default) or OpenAI
 - **Docker** (recommended) or **Python 3.11+**
 
@@ -87,8 +87,9 @@ Copy `config.example.json` to `config.json` (gitignored). Key settings:
 | `zeus.url` | Zeus Engine base URL (`ZEUS_URL` overrides at runtime) |
 | `llm_provider.api_key` | LLM API key (**required**; overlay maps to `XAI_API_KEY` / `api_key_env`) |
 | `llm_provider.models` | Model list; **first entry** is the default |
-| `default_mode` / `settings.mode` | Agent mode (`travel_booking`) |
-| `default_sample` | Zeus sample bucket (`travel-sample`) |
+| `default_mode` / `settings.mode` | Agent mode (`analytics` on Zeus 0.7.x / base-6.1) |
+| `default_sample` | Zeus sample (`travel-sample` / `inventory` / `hotel`) |
+| `client_floor` | Must be `client-floor-6.1` for Zeus 0.7.x (`base-6.1`). Floor-5 fails closed and the agent runs with no Zeus verbs. |
 | `settings.ai_process_result` | Extra insight hop after tools (default **false**) |
 | `session.semantic_cache.enabled` | Semantic agent memory (default **false**; Zeus ≥ 0.7.6 to turn on) |
 
@@ -99,6 +100,7 @@ Copy `config.example.json` to `config.json` (gitignored). Key settings:
 | `ZEUS_URL` | — | Overrides Zeus URL from config |
 | `ZEUS_CLIENT_CONFIG_DIR` | project root | Directory containing `config.json` |
 | `ZEUS_CHAT_REQUESTS_DIR` | `data/chat_requests` | Local chat_request catalog snapshots |
+| `ZEUS_CLIENT_FLOOR` | `client-floor-6.1` | Overrides `client_floor` from config |
 | `PORT` | `5000` | HTTP listen port |
 | `CHAT_LOG_PATH` | `data/chats.jsonl` | Chat persistence file |
 | `ENVIRONMENT` | — | Set to `dev` for Flask debug mode |
@@ -171,7 +173,7 @@ demo_travel_sample/
 │   ├── templates/            # Jinja2 HTML (index.html)
 │   └── static/               # CSS, JS, pinned zeus_client_chat_trace@1.0.0
 ├── data/
-│   └── chat_requests/        # travel_booking catalog snapshot
+│   └── chat_requests/        # vendored analytics base-6.1 pin + inventory load path
 ├── tests/                    # Pytest suite
 ├── config.example.json       # Configuration template
 ├── docker-compose.yml
@@ -220,7 +222,7 @@ travel-planner
 |---------|--------------|-----|
 | `no Zeus URL configured` | Missing or empty config | Create `config.json` from `config.example.json` |
 | `llm_provider has no api_key` | Empty LLM key | Set `llm_provider.api_key` (or `providers.<name>.api_key`) in `config.json` |
-| `no chat_request file for mode 'travel_booking'` | Missing catalog | Ensure `data/chat_requests/by_use_case/chat_request_travel_booking_v2.json` exists |
+| Agent answers without Zeus tools | Catalog floor too low or missing pin | Set `client_floor` to `client-floor-6.1`. Vendored pin: `data/chat_requests/chat_request_analytics_base-6.1.json` (load path `travel-sample__inventory/chat_request_analytics_v2.json`) |
 | Empty destination cards | LLM returned prose only | Check `structured_answer` in the API response |
 | Docker can't reach Zeus | Wrong network URL | Set `zeus.url` / `ZEUS_URL` to a host-accessible address (e.g. `http://host.docker.internal:8080`) |
 | `kotenai-zeus-client 2.3.x required` | Sibling checkout older than 2.3 (this demo uses **2.3.0**) | Update `../zeus_client_python` and `pip install -e ".[dev]"` |
