@@ -17,8 +17,8 @@ from zeus_client.domain.catalog import resolve_catalog_path  # noqa: E402
 from travel_planner.runtime_factory import build_runtime  # noqa: E402
 from travel_planner.zeus_config import configure_paths  # noqa: E402
 
-MODES = ["travel_booking", "analytics"]
-BUCKET, SCOPE = "travel-sample", "_default"
+MODES = ["analytics"]
+BUCKET, SCOPE = "travel-sample", "inventory"
 
 
 def _status(ok: bool) -> str:

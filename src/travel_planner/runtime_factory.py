@@ -252,6 +252,15 @@ def build_runtime_config(
     elif isinstance(zcfg.get("scope_contracts"), dict):
         scope_contracts = dict(zcfg["scope_contracts"])
 
+    # Zeus 0.7.x is pinned to chat_request base-6.1; floor-5 fails closed and
+    # AgentAPI.run_turn then silently runs with no catalog / no Zeus verbs.
+    client_floor = str(
+        os.environ.get("ZEUS_CLIENT_FLOOR")
+        or cfg.get("client_floor")
+        or "client-floor-6.1"
+    )
+    allow_degraded = _as_bool(cfg.get("allow_degraded_catalog"), False)
+
     return RuntimeConfig(
         profile=profile or str(cfg.get("profile") or "development"),
         zeus=ZeusEndpointConfig(
@@ -283,6 +292,8 @@ def build_runtime_config(
         ),
         debug=DebugPolicy(detective_briefing=True),
         chat_requests_dir=str(chat_dir),
+        client_floor=client_floor,
+        allow_degraded_catalog=allow_degraded,
         scope_contracts=scope_contracts,
         semantic_cache=semantic_cache,
     )

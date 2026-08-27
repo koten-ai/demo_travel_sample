@@ -1,6 +1,6 @@
 {
   "build_version": "",
-  "_comment": "Travel planner config. Copy to config.json and fill in your keys. Nested zeus/llm_provider/samples stay valid. session.semantic_cache.enabled needs Zeus >= 0.7.6; leave false unless you opt in. The search UI version stamp is the installed kotenai-zeus-client (2.3.0), not build_version.",
+  "_comment": "Travel planner config. Copy to config.json and fill in your keys. Nested zeus/llm_provider/samples stay valid. Zeus 0.7.x is pinned to chat_request base-6.1 — keep client_floor at client-floor-6.1 or AgentAPI.run_turn drops the catalog. session.semantic_cache.enabled needs Zeus >= 0.7.6; leave false unless you opt in. The search UI version stamp is the installed kotenai-zeus-client (2.3.0), not build_version.",
 
   "zeus": {
     "url": "http://host.docker.internal:8080",
@@ -10,17 +10,13 @@
     "bearer_token": "",
     "session_id": "",
     "scope_credentials": {
-      "travel-sample/_default": { "username": "demo_1", "password": "" }
+      "travel-sample/inventory": { "username": "demo_1", "password": "" }
     },
     "scope_contracts": {
-      "travel-sample/_default": {
-        "travel_booking": {
-          "contract_id": "travel_booking_v2",
-          "contract_hash": ""
-        },
+      "travel-sample/inventory": {
         "analytics": {
-          "contract_id": "analytics_v4",
-          "contract_hash": "md5:a148645f9763b39ea4117c1b35f739db"
+          "contract_id": "analytics_base5_2",
+          "contract_hash": "md5:5aacbf1d7a4d9d5de9436cdffbce050f"
         }
       }
     },
@@ -41,13 +37,14 @@
 
   "chat_requests_sync": {
     "scopes": "from_contracts",
-    "modes": ["travel_booking", "analytics"],
+    "modes": ["analytics"],
     "on_startup": true
   },
 
+  "client_floor": "client-floor-6.1",
   "profile": "development",
   "settings": {
-    "mode": "travel_booking",
+    "mode": "analytics",
     "ai_process_result": false,
     "durable_sessions": true,
     "max_rounds": 12,
@@ -60,13 +57,13 @@
   },
 
   "default_api_version": "v2",
-  "default_mode": "travel_booking",
+  "default_mode": "analytics",
   "default_sample": "travel-sample",
   "samples": {
     "travel-sample": {
       "bucket": "travel-sample",
-      "scope": "_default",
-      "collection": "_default"
+      "scope": "inventory",
+      "collection": "hotel"
     }
   }
 }

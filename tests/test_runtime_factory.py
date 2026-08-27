@@ -84,6 +84,7 @@ def test_build_runtime_config_maps_nested_travel_shape(tmp_path, monkeypatch):
     assert rt_cfg.semantic_cache.enabled is False
     assert rt_cfg.zeus.tls_verify is True
     assert rt_cfg.settings.durable_sessions is True
+    assert rt_cfg.client_floor == "client-floor-6.1"
     overlay = secret_overlay_from_config(cfg)
     assert overlay["XAI_API_KEY"] == "test-key"
     assert overlay["ZEUS_PASSWORD"] == "inline-pass"
@@ -123,6 +124,17 @@ def test_zeus_url_env_overrides_config(tmp_path, monkeypatch):
     monkeypatch.setenv("ZEUS_URL", "http://zeus.example:8080")
     rt_cfg = build_runtime_config(raw=cfg, profile="development")
     assert rt_cfg.zeus.url == "http://zeus.example:8080"
+
+
+def test_client_floor_from_config_and_env(tmp_path, monkeypatch):
+    cfg = _nested_travel_config(tmp_path)
+    cfg["client_floor"] = "client-floor-6"
+    monkeypatch.delenv("ZEUS_CLIENT_FLOOR", raising=False)
+    rt_cfg = build_runtime_config(raw=cfg, profile="development")
+    assert rt_cfg.client_floor == "client-floor-6"
+    monkeypatch.setenv("ZEUS_CLIENT_FLOOR", "client-floor-6.1")
+    rt_cfg = build_runtime_config(raw=cfg, profile="development")
+    assert rt_cfg.client_floor == "client-floor-6.1"
 
 
 def test_ai_process_result_can_be_enabled(tmp_path):
