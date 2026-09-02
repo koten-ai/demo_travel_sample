@@ -18,7 +18,7 @@
 - **High-level flow**:
   1. Package import calls `configure_paths()` (config dir, chat_requests dir, chat log).
   2. `create_app()` → `startup()` builds a process-scoped `ZeusRuntime` and optionally `rt.catalog.sync()`.
-  3. `POST /api/search` → `run_search()` → `rt.agent.run_turn` (omits `chat_request` so 2.3.0 `load_for_turn` merges SCOPE BRIEF + MINI-SCHEMA).
+  3. `POST /api/search` → `run_search()` → `rt.agent.run_turn` (omits `chat_request` so 2.3.0 `load_for_turn` merges SCOPE BRIEF + MINI-SCHEMA). Query `debug=true` (same kill switch as the tracer) passes `rewind=True` for that turn only.
   4. `turn_mapper` peels G1 user answer, attaches detective onto `trace` (not the chat text), strips G2 keys, filters rows with `DEMO_OUTPUT_SCHEMA`, and runs the card waterfall.
   5. Flask returns the existing `/api/search` JSON keys; `app.js` renders cards and the **pinned** `zeus_client_chat_trace@1.0.0` inspector consumes `trace`.
 
@@ -151,3 +151,4 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 | 2026-08-25 | Grok | Pin `zeus_client_chat_trace@1.0.0` in static (not CDN latest) |
 | 2026-08-25 | agent | Analytics XML pipeline dump: recover as tool call; raw analytics query (no booking prefix) |
 | 2026-08-25 | Grok | Homepage version stamp is imported `kotenai-zeus-client` **2.3.0** |
+| 2026-09-02 | Grok | `POST /api/search?debug=true` → `run_turn(rewind=True)` (see `DEBUG_QUERY_REWIND.md`) |

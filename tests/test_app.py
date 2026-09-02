@@ -40,6 +40,76 @@ def test_search_rejects_empty_query(flask_client):
     assert response.get_json()["error"] == "empty query"
 
 
+def test_search_script_forwards_page_debug_query():
+    script = Path(__file__).resolve().parents[1] / "src" / "travel_planner" / "static" / "app.js"
+    src = script.read_text(encoding="utf-8")
+    assert "pageDebugEnabled" in src
+    assert "searchApiUrl" in src
+    assert "/api/search?debug=true" in src
+    assert 'new URLSearchParams(window.location.search).get("debug")' in src
+
+
+def test_debug_query_enabled_truthy_set():
+    from travel_planner.app import debug_query_enabled
+
+    assert debug_query_enabled("true") is True
+    assert debug_query_enabled("TRUE") is True
+    assert debug_query_enabled("1") is True
+    assert debug_query_enabled("yes") is True
+    assert debug_query_enabled("on") is True
+    assert debug_query_enabled(True) is True
+    assert debug_query_enabled("false") is False
+    assert debug_query_enabled("0") is False
+    assert debug_query_enabled("") is False
+    assert debug_query_enabled(None) is False
+
+
+def test_search_debug_query_enables_rewind(flask_client, monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_run_search(query, chat_id=None, *, rewind=False):
+        seen["query"] = query
+        seen["chat_id"] = chat_id
+        seen["rewind"] = rewind
+        return {"chat_id": chat_id or "c1", "query": query, "rewind": rewind}
+
+    monkeypatch.setattr("travel_planner.app.run_search", fake_run_search)
+    response = flask_client.post(
+        "/api/search?debug=true", json={"query": "beaches", "chat_id": "c1"}
+    )
+    assert response.status_code == 200
+    assert seen["rewind"] is True
+    assert seen["query"] == "beaches"
+    assert response.get_json()["rewind"] is True
+
+
+def test_search_without_debug_does_not_enable_rewind(flask_client, monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_run_search(query, chat_id=None, *, rewind=False):
+        seen["rewind"] = rewind
+        return {"chat_id": "c1", "query": query, "rewind": rewind}
+
+    monkeypatch.setattr("travel_planner.app.run_search", fake_run_search)
+    response = flask_client.post("/api/search", json={"query": "beaches"})
+    assert response.status_code == 200
+    assert seen["rewind"] is False
+    assert response.get_json()["rewind"] is False
+
+
+def test_search_debug_false_does_not_enable_rewind(flask_client, monkeypatch):
+    seen: dict[str, object] = {}
+
+    def fake_run_search(query, chat_id=None, *, rewind=False):
+        seen["rewind"] = rewind
+        return {"chat_id": "c1", "query": query, "rewind": rewind}
+
+    monkeypatch.setattr("travel_planner.app.run_search", fake_run_search)
+    response = flask_client.post("/api/search?debug=false", json={"query": "beaches"})
+    assert response.status_code == 200
+    assert seen["rewind"] is False
+
+
 def test_tool_order_returns_versions(flask_client):
     response = flask_client.get("/api/tool-order")
     assert response.status_code == 200

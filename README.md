@@ -11,7 +11,7 @@ Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, using [
 - **Natural-language search** — Ask for destinations by vibe, budget, region, or activity (e.g. *"warm beaches in Europe under $2000"*).
 - **LLM + Zeus agent loop** — An LLM orchestrates Zeus V2 verbs (`search`, `find`, `pipeline`, etc.) against the `travel-sample.inventory` scope.
 - **Destination cards** — Results are extracted from Zeus tool traces, with a markdown answer parser as fallback when the model returns prose instead of structured rows.
-- **Zeus trace panel** — Vendored **zeus_client_chat_trace 1.0.0** inspector (not CDN `latest`). Open the app with `?debug=true` and use the lightning toggle (bottom-left).
+- **Zeus trace panel** — Vendored **zeus_client_chat_trace 1.0.0** inspector (not CDN `latest`). Open the app with `?debug=true` and use the lightning toggle (bottom-left). That same query also opts the search turn into Zeus rewind (`?rewind=true` on verbs; JSON `"rewind": true` on session hops).
 - **Multi-provider LLM support** — Configure xAI Grok or OpenAI (extensible via `config.json`).
 - **Docker-ready** — One-command deployment with hot-reload volumes for local development.
 
@@ -25,8 +25,8 @@ sequenceDiagram
     participant LLM
     participant Zeus as Zeus Engine
 
-    User->>Flask: POST /api/search {query}
-    Flask->>Agent: run_search() → rt.agent.run_turn()
+    User->>Flask: POST /api/search {query} (?debug=true → rewind)
+    Flask->>Agent: run_search() → rt.agent.run_turn(rewind=…)
     Agent->>LLM: analytics catalog + user query
     LLM->>Zeus: V2 tool calls (search, find, pipeline…)
     Zeus-->>LLM: destination data
@@ -112,10 +112,12 @@ Copy `config.example.json` to `config.json` (gitignored). Key settings:
 Search for destinations matching natural-language preferences.
 
 ```bash
-curl -X POST http://localhost:5000/api/search \
+curl -X POST 'http://localhost:5000/api/search?debug=true' \
   -H "Content-Type: application/json" \
   -d '{"query": "tropical destinations with great food"}'
 ```
+
+Query `debug=true` (same as `/?debug=true`) sets `rewind=true` on that Zeus turn. Omit it for a normal search.
 
 **Request body:**
 
@@ -139,7 +141,8 @@ curl -X POST http://localhost:5000/api/search \
   ],
   "trace": { "tool_calls": […] },
   "model": "grok-4-1-fast-non-reasoning",
-  "provider": "grok"
+  "provider": "grok",
+  "rewind": true
 }
 ```
 

@@ -43,7 +43,9 @@ def user_message_for_mode(query: str, mode: str | None) -> str:
     return TRAVEL_PROMPT_PREFIX + q
 
 
-async def _search_async(query: str, chat_id: str | None) -> dict[str, Any]:
+async def _search_async(
+    query: str, chat_id: str | None, *, rewind: bool = False
+) -> dict[str, Any]:
     rt = get_runtime()
     cfg = rt.config
     target = cfg.target
@@ -78,6 +80,7 @@ async def _search_async(query: str, chat_id: str | None) -> dict[str, Any]:
             chat_id=chat_id,
             model=cfg.llm.model,
             enable_sessions=bool(settings.durable_sessions),
+            rewind=bool(rewind),
         )
 
         answer = user_answer(result)
@@ -119,7 +122,12 @@ async def _search_async(query: str, chat_id: str | None) -> dict[str, Any]:
 
     if result.status == TurnStatus.ERROR and result.error is not None:
         err_msg = result.error.message or "agent turn failed"
-        return {"error": err_msg, "chat_id": chat_id, "status": "error"}
+        return {
+            "error": err_msg,
+            "chat_id": chat_id,
+            "status": "error",
+            "rewind": bool(rewind),
+        }
 
     return {
         "chat_id": chat_id,
@@ -142,19 +150,20 @@ async def _search_async(query: str, chat_id: str | None) -> dict[str, Any]:
         "session_id": chat.get("zeus_session_id") or "",
         "session_round": int(chat.get("zeus_round") or 0),
         "contract_status": chat.get("contract_status") or "none",
+        "rewind": bool(rewind),
     }
 
 
-def run_search(query: str, chat_id: str | None = None) -> dict:
+def run_search(query: str, chat_id: str | None = None, *, rewind: bool = False) -> dict:
     """Sync entry point for Flask routes."""
     try:
-        return run_coro(_search_async(query, chat_id))
+        return run_coro(_search_async(query, chat_id, rewind=rewind))
     except RuntimeError as e:
-        return {"error": str(e)}
+        return {"error": str(e), "rewind": bool(rewind)}
     except ZeusClientError as e:
         msg = getattr(e, "public_message", None) or str(e)
-        return {"error": msg}
+        return {"error": msg, "rewind": bool(rewind)}
     except httpx.HTTPError as e:
-        return {"error": f"network error: {e}"}
+        return {"error": f"network error: {e}", "rewind": bool(rewind)}
     except ValueError as e:
-        return {"error": str(e)}
+        return {"error": str(e), "rewind": bool(rewind)}

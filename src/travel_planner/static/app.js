@@ -509,6 +509,20 @@
     }
   }
 
+  function pageDebugEnabled() {
+    try {
+      const raw = new URLSearchParams(window.location.search).get("debug");
+      if (raw == null || raw === "") return false;
+      return ["1", "true", "yes", "on"].includes(String(raw).trim().toLowerCase());
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function searchApiUrl() {
+    return pageDebugEnabled() ? "/api/search?debug=true" : "/api/search";
+  }
+
   async function performSearch() {
     if (isSearchBusy()) return;
     hideError();
@@ -519,7 +533,7 @@
     searchController = controller;
     setSearchBusy(true);
     try {
-      const res = await fetch("/api/search", {
+      const res = await fetch(searchApiUrl(), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query, chat_id: chatId }),

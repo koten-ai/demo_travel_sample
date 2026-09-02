@@ -67,7 +67,7 @@
   1. Type travel preferences in the multi-line search box (e.g. "warm beaches in Europe under $2000"). Shift+Enter adds a new line; Enter or the search button submits.
   2. While the search runs, the same circular button turns red (`btn-error`) and shows a spinning ring around a stop square (`aria-label="Cancel search"`). Click it to abort the in-flight request; the composer unlocks and no error toast is shown.
   3. View destination cards and AI summary.
-  4. Open `/?debug=true` and use the lightning toggle (bottom-left) for the **zeus_client_chat_trace@1.0.0** inspector.
+  4. Open `/?debug=true` and use the lightning toggle (bottom-left) for the **zeus_client_chat_trace@1.0.0** inspector. The UI forwards that flag as `POST /api/search?debug=true`, which sets `rt.agent.run_turn(rewind=True)` so Zeus persists a verbose tape for Hub Rewind (see `.grok/guides/DEBUG_QUERY_REWIND.md`).
 
 - **Edge cases**:
   - Multi-line queries are sent as-is to `/api/search` (`query` string may contain `\n`).
@@ -77,7 +77,7 @@
 
 - **API example**:
   ```bash
-  curl -X POST http://localhost:5000/api/search \
+  curl -X POST 'http://localhost:5000/api/search?debug=true' \
     -H "Content-Type: application/json" \
     -d '{"query": "tropical destinations with great food"}'
   ```
@@ -102,6 +102,7 @@
 - `.grok/guides/ZEUS_CLIENT_V2_BFF.md` — ZeusRuntime BFF (current)
 - `.grok/plans/MULTI_LINE_SEARCH_BOX.md` — composer textarea
 - `.grok/plans/SEND_BUTTON_AS_CANCEL.md` — in-flight cancel button
+- `.grok/guides/DEBUG_QUERY_REWIND.md` — `?debug=true` → Zeus rewind on `/api/search`
 
 ## 7. Changelog
 
@@ -121,3 +122,4 @@
 | 2026-08-25 | Grok | In-flight button combines spinner ring and stop square in one control |
 | 2026-08-25 | Grok | In-flight cancel button uses DaisyUI `btn-error` (red) |
 | 2026-08-25 | Grok | Search UI version stamp is installed `kotenai-zeus-client` **2.3.0** (`zeus_client.__version__`) |
+| 2026-09-02 | Grok | `?debug=true` opts `/api/search` into Zeus rewind; see `DEBUG_QUERY_REWIND.md` |

@@ -16,7 +16,7 @@
   2. `scripts/vendor_trace.sh` copies `dist/zeus_client_chat_trace.js` (+ `.map`) into `src/travel_planner/static/`.
   3. Index sets `ZeusTraceConfig.toolOrder` (server) and `hubBaseUrl`, then loads the pinned script.
   4. `app.js` calls `appendTraceCard(query, data)` after `/api/search`.
-  5. Widget mounts only when `?debug=true` (or `enabled: true`).
+  5. Widget mounts only when `?debug=true` (or `enabled: true`). `app.js` also forwards that page flag to `POST /api/search?debug=true` so the BFF opts the turn into Zeus rewind (see `.grok/guides/DEBUG_QUERY_REWIND.md`).
 - **Key components**:
   - `scripts/vendor_trace.sh` — rebuild + copy
   - `src/travel_planner/static/zeus_client_chat_trace.js` — pinned 1.0.0 inspector
@@ -78,3 +78,4 @@
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-08-25 | Grok | Pin vendored inspector 1.0.0; drop CDN `latest` |
+| 2026-09-02 | Grok | Page `?debug=true` also forwards onto `/api/search` for Zeus rewind |

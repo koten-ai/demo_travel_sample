@@ -15,6 +15,17 @@ from travel_planner.zeus_config import configure_paths
 
 _app: Flask | None = None
 
+_TRUTHY_QUERY = {"1", "true", "yes", "on"}
+
+
+def debug_query_enabled(value: object | None) -> bool:
+    """True when query ``debug`` is 1/true/yes/on (same set as the tracer widget)."""
+    if value is True:
+        return True
+    if value is False or value is None:
+        return False
+    return str(value).strip().lower() in _TRUTHY_QUERY
+
 
 def _load_build_version() -> str:
     """Read build_version from project config.json (empty string if missing)."""
@@ -91,7 +102,8 @@ def create_app() -> Flask:
         if not query:
             return jsonify({"error": "empty query"}), 400
 
-        result = run_search(query, body.get("chat_id"))
+        rewind = debug_query_enabled(request.args.get("debug"))
+        result = run_search(query, body.get("chat_id"), rewind=rewind)
         if result.get("error"):
             err = str(result["error"])
             status = 502 if "network error" in err else 400

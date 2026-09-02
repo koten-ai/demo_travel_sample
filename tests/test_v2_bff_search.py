@@ -79,7 +79,7 @@ def test_api_search_maps_turn_result(flask_client, monkeypatch):
         "contract_status": "match",
     }
 
-    monkeypatch.setattr("travel_planner.app.run_search", lambda q, c=None: payload)
+    monkeypatch.setattr("travel_planner.app.run_search", lambda q, c=None, *, rewind=False: payload)
 
     response = flask_client.post("/api/search", json={"query": "warm beaches"})
     assert response.status_code == 200
@@ -157,8 +157,45 @@ def test_run_search_async_uses_runtime(monkeypatch):
     assert "warm beaches" in str(calls["message"])
     assert str(calls["message"]).startswith("Find travel destinations")
     assert calls["kwargs"]["enable_sessions"] is True
+    assert calls["kwargs"]["rewind"] is False
     assert "chat_request" not in calls["kwargs"]
+    assert out["rewind"] is False
     assert out["results"][0]["name"] == "Nice"
+
+
+def test_run_search_async_passes_rewind(monkeypatch):
+    """debug=true turns pass rewind=True into AgentAPI.run_turn."""
+    import asyncio
+
+    from travel_planner import search as search_mod
+
+    calls: dict[str, object] = {}
+
+    async def fake_run_turn(message, **kwargs):
+        calls["kwargs"] = kwargs
+        return _fake_turn_result()
+
+    fake_rt = SimpleNamespace(
+        config=SimpleNamespace(
+            target=SimpleNamespace(bucket="travel-sample", scope="_default", collection="_default"),
+            settings=SimpleNamespace(mode="analytics", durable_sessions=True),
+            llm=SimpleNamespace(model="m", provider="xai"),
+            zeus=SimpleNamespace(url="http://127.0.0.1:8080"),
+        ),
+        agent=SimpleNamespace(run_turn=fake_run_turn),
+    )
+
+    monkeypatch.setattr(search_mod, "get_runtime", lambda: fake_rt)
+
+    async def fake_persist(chat_id):
+        return None
+
+    monkeypatch.setattr(search_mod, "persist_chat", fake_persist)
+
+    out = asyncio.run(search_mod._search_async("airports in US", None, rewind=True))
+    assert calls["kwargs"]["rewind"] is True
+    assert out["rewind"] is True
+    assert out["mode"] == "analytics"
 
 
 def test_analytics_user_message_is_raw_query():
