@@ -136,7 +136,7 @@ def test_health_zeus_client_version(flask_client):
     assert body["status"] == "ok"
     assert body["app_version"]
     assert body["zeus_client_version"] == zeus_client.__version__
-    assert str(body["zeus_client_version"]).startswith("2.3")
+    assert str(body["zeus_client_version"]).startswith("2.4")
     assert body["client_import"] == "zeus_client"
     assert body["pipeline_envelope_recovery"] is True
 

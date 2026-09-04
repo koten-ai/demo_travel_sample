@@ -2,7 +2,7 @@
 
 A demo travel search app that combines natural-language queries with the [Zeus Engine](https://github.com/koten-ai) and an LLM agent loop. Describe where you want to go in plain English and get destination recommendations backed by real Zeus `travel-sample` data.
 
-Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, using [`kotenai-zeus-client` **2.3.0**](https://github.com/koten-ai/zeus_client_python) from the sibling `../zeus_client_python` repo for the Zeus agent loop (boot gate: 2.3.x family).
+Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, using [`kotenai-zeus-client` **2.4.0**](https://github.com/koten-ai/zeus_client_python) from the sibling `../zeus_client_python` repo for the Zeus agent loop (boot gate: 2.4.x family, ZCP-113 hub-join-v1).
 
 **Reference demo** for the [Demo Builder Kit](../zeus_client_python/docs/demo-builder/) (build similar apps from docs). GitBook: site section **Demo** → Python.
 
@@ -11,7 +11,7 @@ Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, using [
 - **Natural-language search** — Ask for destinations by vibe, budget, region, or activity (e.g. *"warm beaches in Europe under $2000"*).
 - **LLM + Zeus agent loop** — An LLM orchestrates Zeus V2 verbs (`search`, `find`, `pipeline`, etc.) against the `travel-sample.inventory` scope.
 - **Destination cards** — Results are extracted from Zeus tool traces, with a markdown answer parser as fallback when the model returns prose instead of structured rows.
-- **Zeus trace panel** — Vendored **zeus_client_chat_trace 1.0.0** inspector (not CDN `latest`). Open the app with `?debug=true` and use the lightning toggle (bottom-left). That same query also opts the search turn into Zeus rewind (`?rewind=true` on verbs; JSON `"rewind": true` on session hops).
+- **Zeus trace panel** — Vendored **zeus_client_chat_trace 1.0.0** inspector (not CDN `latest`). Open the app with `?debug=true` and use the lightning toggle (bottom-left). That same query also opts the search turn into Zeus rewind (`?rewind=true` on verbs; JSON `"rewind": true` on session hops). Hub Analysis Prompt **sent** tiles need `?debug=true` + durable sessions + this 2.4.0 pin.
 - **Multi-provider LLM support** — Configure xAI Grok or OpenAI (extensible via `config.json`).
 - **Docker-ready** — One-command deployment with hot-reload volumes for local development.
 
@@ -152,7 +152,7 @@ Returns the Zeus tool invocation order for V1 and V2 API versions (used by the t
 
 ### `GET /api/health`
 
-Process health: app version, installed `kotenai-zeus-client` version (currently **2.3.0**, must start with `2.3`), and `client_import` (`zeus_client`).
+Process health: app version, installed `kotenai-zeus-client` version (currently **2.4.0**, must start with `2.4`), and `client_import` (`zeus_client`).
 
 ### `GET /`
 
@@ -228,7 +228,7 @@ travel-planner
 | Agent answers without Zeus tools | Catalog floor too low or missing pin | Set `client_floor` to `client-floor-6.1`. Vendored pin: `data/chat_requests/chat_request_analytics_base-6.1.json` (load path `travel-sample__inventory/chat_request_analytics_v2.json`) |
 | Empty destination cards | LLM returned prose only | Check `structured_answer` in the API response |
 | Docker can't reach Zeus | Wrong network URL | Set `zeus.url` / `ZEUS_URL` to a host-accessible address (e.g. `http://host.docker.internal:8080`) |
-| `kotenai-zeus-client 2.3.x required` | Sibling checkout older than 2.3 (this demo uses **2.3.0**) | Update `../zeus_client_python` and `pip install -e ".[dev]"` |
+| `kotenai-zeus-client 2.4.x required` | Sibling checkout older than 2.4 (this demo uses **2.4.0**) | Update `../zeus_client_python` and `pip install -e ".[dev]"` |
 | `network error` on search | Zeus or LLM unreachable | Verify Zeus is running and API key is valid |
 
 ## License

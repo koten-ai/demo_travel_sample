@@ -25,13 +25,13 @@ from zeus_client.config.models import (
 
 from travel_planner.paths import PROJECT_ROOT
 
-REQUIRED_CLIENT_VERSION_PREFIX = "2.3"
+REQUIRED_CLIENT_VERSION_PREFIX = "2.4"
 
 logger = logging.getLogger("travel_planner")
 
 
 def require_client_version() -> str:
-    """Fail closed unless kotenai-zeus-client is the 2.3.x family this BFF targets."""
+    """Fail closed unless kotenai-zeus-client is the 2.4.x family this BFF targets."""
     import zeus_client
     from zeus_client.domain import layer_a
 
@@ -43,7 +43,7 @@ def require_client_version() -> str:
         )
     if not hasattr(layer_a, "parse_pipeline_envelope"):
         raise RuntimeError(
-            "kotenai-zeus-client 2.3.x with pipeline envelope recovery required; "
+            "kotenai-zeus-client 2.4.x with pipeline envelope recovery required; "
             "rebuild so the image installs sibling ../zeus_client_python"
         )
     return ver

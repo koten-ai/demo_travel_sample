@@ -69,7 +69,7 @@ async def _search_async(
         prior_session = session_handle_from_chat(chat)
         prior_messages = prior_messages_from_turns(chat.get("turns"))
 
-        # Omit chat_request so 2.3.0 AgentAPI.run_turn calls catalog.load_for_turn
+        # Omit chat_request so 2.4.0 AgentAPI.run_turn calls catalog.load_for_turn
         # (SCOPE BRIEF + MINI-SCHEMA merge). Do not pass a frozen body here.
         result = await rt.agent.run_turn(
             message,

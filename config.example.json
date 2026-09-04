@@ -1,6 +1,6 @@
 {
   "build_version": "",
-  "_comment": "Travel planner config. Copy to config.json and fill in your keys. Nested zeus/llm_provider/samples stay valid. Zeus 0.7.x is pinned to chat_request base-6.1 — keep client_floor at client-floor-6.1 or AgentAPI.run_turn drops the catalog. session.semantic_cache.enabled needs Zeus >= 0.7.6; leave false unless you opt in. The search UI version stamp is the installed kotenai-zeus-client (2.3.0), not build_version.",
+  "_comment": "Travel planner config. Copy to config.json and fill in your keys. Nested zeus/llm_provider/samples stay valid. Zeus 0.7.x is pinned to chat_request base-6.1 — keep client_floor at client-floor-6.1 or AgentAPI.run_turn drops the catalog. session.semantic_cache.enabled needs Zeus >= 0.7.6; leave false unless you opt in. The search UI version stamp is the installed kotenai-zeus-client (2.4.0), not build_version. Hub Analysis Prompt sent tiles need ?debug=true (rewind) + durable_sessions + client >= 2.4.0.",
 
   "zeus": {
     "url": "http://host.docker.internal:8080",
