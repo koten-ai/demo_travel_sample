@@ -10,7 +10,7 @@ requires-python = ">=3.11"
 dependencies = [
     "flask==3.1.0",
     "httpx==0.28.1",
-    "kotenai-zeus-client @ file:../zeus_client_python",  # sibling 2.3.0 in use (2.3.x family)
+    "kotenai-zeus-client @ file:../zeus_client_python",  # sibling 2.4.0 in use (2.4.x family, ZCP-113 hub-join-v1)
 ]
 
 [project.optional-dependencies]
