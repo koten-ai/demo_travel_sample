@@ -23,8 +23,6 @@ src/travel_planner.egg-info/top_level.txt
 src/travel_planner/static/app.css
 src/travel_planner/static/app.js
 src/travel_planner/static/trace.js
-src/travel_planner/static/zeus_client_chat_trace.js
-src/travel_planner/static/zeus_client_chat_trace.js.map
 src/travel_planner/templates/index.html
 tests/test_answer_parser.py
 tests/test_app.py

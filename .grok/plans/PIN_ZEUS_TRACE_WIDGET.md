@@ -1,7 +1,7 @@
 # Plan: Pin Zeus Tracer 1.2.0
 
 **Date**: 2026-09-02
-**Status**: Superseded by `../zeus_client_chat_trace/.grok/plans/PUBLISH_CDN_1_2_3.md` (current pin **1.2.3**)
+**Status**: Superseded by `.grok/plans/CDN_TRACE_WIDGET_LATEST.md` (CDN `latest`; no `/static/` pin)
 **Task**: Pin TravelPlan to the vendored `zeus_client_chat_trace@1.2.0` inspector instead of CDN `latest`.
 **Priority**: High
 **Estimated Effort**: 0.5 hours / 3 steps

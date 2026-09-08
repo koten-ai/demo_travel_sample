@@ -2,8 +2,10 @@
 
 **Date**: 2026-09-08
 **Feature**: TravelPlan vendors `zeus_client_chat_trace@1.2.3` and loads it from `/static/`, not CDN `latest`
-**Status**: Active
-**Related Plan**: widget: `../zeus_client_chat_trace/.grok/plans/PUBLISH_CDN_1_2_3.md`
+**Status**: Deprecated / Superseded by `.grok/guides/CDN_TRACE_WIDGET.md`
+**Related Plan**: `.grok/plans/CDN_TRACE_WIDGET_LATEST.md` (current); historical pin: widget `../zeus_client_chat_trace/.grok/plans/PUBLISH_CDN_1_2_3.md`
+
+TravelPlan now loads CDN `latest`. Keep this guide only as the rollback recipe (restore vendored JS + `/static/…?v=`).
 
 ## 1. Overview
 - **Purpose**: Freeze the inspector UI TravelPlan ships so CDN `latest` cannot change it out from under the demo.
@@ -78,6 +80,7 @@
 ## 7. Changelog
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-09-08 | Grok | Deprecated: TravelPlan now loads CDN `latest` (see `CDN_TRACE_WIDGET.md`) |
 | 2026-09-08 | Grok | Pin vendored inspector **1.2.3** (Turn traces UI detail); CDN also has `…/1.2.3/` + `latest` |
 | 2026-09-04 | Grok | Pin vendored inspector **1.2.2** (active-row stacking + title inset); CDN also has `…/1.2.2/` + `latest` |
 | 2026-09-03 | Grok | Pin vendored inspector **1.2.1** (turn dropdown); CDN also has `…/1.2.1/` + `latest` |

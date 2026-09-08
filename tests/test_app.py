@@ -14,6 +14,11 @@ def test_index_renders(flask_client):
     assert b"TravelPlan" in response.data or b"travel" in response.data.lower()
     assert b"/static/app.css" in response.data
     assert b"/static/app.js" in response.data
+    assert (
+        b"https://koten-static-cdn.nyc3.cdn.digitaloceanspaces.com/zeus_client_chat_trace/latest/zeus_client_chat_trace.js"
+        in response.data
+    )
+    assert b"/static/zeus_client_chat_trace.js" not in response.data
     assert b'<textarea' in response.data
     assert b'id="searchInput"' in response.data
     assert b"Shift+Enter" in response.data

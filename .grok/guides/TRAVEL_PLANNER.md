@@ -32,7 +32,7 @@
   - `src/travel_planner/chat_store.py` — Multi-turn chat JSONL persistence
   - `src/travel_planner/tool_order.py` — `/api/tool-order` for trace chart
   - `src/travel_planner/zeus_config.py` — Path env before runtime bind
-  - `src/travel_planner/static/` — CSS, JS, pinned `zeus_client_chat_trace@1.0.0` (see `.grok/guides/PINNED_TRACE_WIDGET.md`)
+  - `src/travel_planner/static/` — CSS, JS; tracer is CDN `latest` (see `.grok/guides/CDN_TRACE_WIDGET.md`)
   - `data/chat_requests/` — `travel_booking` catalog snapshot
   - `kotenai-zeus-client` — ZeusRuntime pip package (see `.grok/guides/ZEUS_CLIENT_V2_BFF.md`)
 
@@ -67,7 +67,7 @@
   1. Type travel preferences in the multi-line search box (e.g. "warm beaches in Europe under $2000"). Shift+Enter adds a new line; Enter or the search button submits.
   2. While the search runs, the same circular button turns red (`btn-error`) and shows a spinning ring around a stop square (`aria-label="Cancel search"`). Click it to abort the in-flight request; the composer unlocks and no error toast is shown.
   3. View destination cards and AI summary.
-  4. Open `/?debug=true` and use the lightning toggle (bottom-left) for the **zeus_client_chat_trace@1.0.0** inspector. The UI forwards that flag as `POST /api/search?debug=true`, which sets `rt.agent.run_turn(rewind=True)` so Zeus persists a verbose tape for Hub Rewind (see `.grok/guides/DEBUG_QUERY_REWIND.md`).
+  4. Open `/?debug=true` and use the lightning toggle (bottom-left) for the **zeus_client_chat_trace** inspector (CDN `latest`). The UI forwards that flag as `POST /api/search?debug=true`, which sets `rt.agent.run_turn(rewind=True)` so Zeus persists a verbose tape for Hub Rewind (see `.grok/guides/DEBUG_QUERY_REWIND.md`).
 
 - **Edge cases**:
   - Multi-line queries are sent as-is to `/api/search` (`query` string may contain `\n`).
@@ -103,6 +103,7 @@
 - `.grok/plans/MULTI_LINE_SEARCH_BOX.md` — composer textarea
 - `.grok/plans/SEND_BUTTON_AS_CANCEL.md` — in-flight cancel button
 - `.grok/guides/DEBUG_QUERY_REWIND.md` — `?debug=true` → Zeus rewind on `/api/search`
+- `.grok/guides/CDN_TRACE_WIDGET.md` — CDN `latest` inspector embed
 
 ## 7. Changelog
 
@@ -113,6 +114,7 @@
 | 2026-07-01 | agent | Restructured to src/travel_planner + vendor/ layout with pyproject.toml |
 | 2026-07-07 | agent | Replaced vendored `vendor/python3` with `kotenai-zeus-client` pip package; see `ZEUS_CLIENT_INTEGRATION.md` |
 | 2026-08-21 | agent | BFF cleanup: `ZeusRuntime` / `run_turn` (UI unchanged); see `ZEUS_CLIENT_V2_BFF.md` |
+| 2026-09-08 | Grok | Load `zeus_client_chat_trace` from CDN `latest` (see `CDN_TRACE_WIDGET.md`) |
 | 2026-08-25 | Grok | Pin vendored `zeus_client_chat_trace@1.0.0` (not CDN latest) |
 | 2026-08-21 | agent | Require `kotenai-zeus-client` 2.3.x; family design law (G1 UI, cheap `ai_process_result`) |
 | 2026-08-25 | Grok | Multi-line search box: textarea, autosize, Enter to search / Shift+Enter newline |

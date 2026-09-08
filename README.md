@@ -11,7 +11,7 @@ Built with **Flask**, **Tailwind CSS**, and **DaisyUI** on the frontend, using [
 - **Natural-language search** — Ask for destinations by vibe, budget, region, or activity (e.g. *"warm beaches in Europe under $2000"*).
 - **LLM + Zeus agent loop** — An LLM orchestrates Zeus V2 verbs (`search`, `find`, `pipeline`, etc.) against the `travel-sample.inventory` scope.
 - **Destination cards** — Results are extracted from Zeus tool traces, with a markdown answer parser as fallback when the model returns prose instead of structured rows.
-- **Zeus trace panel** — Vendored **zeus_client_chat_trace 1.0.0** inspector (not CDN `latest`). Open the app with `?debug=true` and use the lightning toggle (bottom-left). That same query also opts the search turn into Zeus rewind (`?rewind=true` on verbs; JSON `"rewind": true` on session hops). Hub Analysis Prompt **sent** tiles need `?debug=true` + durable sessions + this 2.4.0 pin.
+- **Zeus trace panel** — CDN **zeus_client_chat_trace `latest`** inspector. Open the app with `?debug=true` and use the lightning toggle (bottom-left). That same query also opts the search turn into Zeus rewind (`?rewind=true` on verbs; JSON `"rewind": true` on session hops). Hub Analysis Prompt **sent** tiles need `?debug=true` + durable sessions + the 2.4.0 client pin.
 - **Multi-provider LLM support** — Configure xAI Grok or OpenAI (extensible via `config.json`).
 - **Docker-ready** — One-command deployment with hot-reload volumes for local development.
 
@@ -174,7 +174,7 @@ demo_travel_sample/
 │   ├── tool_order.py         # Trace panel tool-order axes
 │   ├── zeus_config.py        # Path/env configuration before runtime bind
 │   ├── templates/            # Jinja2 HTML (index.html)
-│   └── static/               # CSS, JS, pinned zeus_client_chat_trace@1.0.0
+│   └── static/               # CSS, JS (trace widget is CDN latest, not vendored)
 ├── data/
 │   └── chat_requests/        # vendored analytics base-6.1 pin + inventory load path
 ├── tests/                    # Pytest suite
@@ -186,15 +186,15 @@ demo_travel_sample/
 
 ## Development
 
-### Pin / refresh the tracer widget
+### Tracer widget (CDN latest)
 
-TravelPlan **vendors** `zeus_client_chat_trace@1.0.0` into `src/travel_planner/static/`. It does not load CDN `latest`.
+TravelPlan loads `zeus_client_chat_trace` from the public CDN **`latest`** pointer (not a vendored `/static/` copy):
 
-```bash
-./scripts/vendor_trace.sh
+```text
+https://koten-static-cdn.nyc3.cdn.digitaloceanspaces.com/zeus_client_chat_trace/latest/zeus_client_chat_trace.js
 ```
 
-That rebuilds the sibling `../zeus_client_chat_trace` and copies `dist/` here. Keep the script tag at `/static/zeus_client_chat_trace.js?v=1.0.0` in `templates/index.html` (bump `?v=` when the file changes). See `.grok/guides/PINNED_TRACE_WIDGET.md`.
+Publish a new inspector from the sibling repo (`npm test && npm run build && npm run publish:cdn`). To freeze a release, point `templates/index.html` at `…/zeus_client_chat_trace/<semver>/zeus_client_chat_trace.js`. See `.grok/guides/CDN_TRACE_WIDGET.md`.
 
 ### Run tests
 
