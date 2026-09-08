@@ -1,14 +1,14 @@
 # Guide: Pinned Zeus Tracer Widget
 
-**Date**: 2026-08-25
-**Feature**: TravelPlan vendors `zeus_client_chat_trace@1.0.0` and loads it from `/static/`, not CDN `latest`
+**Date**: 2026-09-08
+**Feature**: TravelPlan vendors `zeus_client_chat_trace@1.2.3` and loads it from `/static/`, not CDN `latest`
 **Status**: Active
-**Related Plan**: `.grok/plans/PIN_ZEUS_TRACE_WIDGET.md`
+**Related Plan**: widget: `../zeus_client_chat_trace/.grok/plans/PUBLISH_CDN_1_2_3.md`
 
 ## 1. Overview
 - **Purpose**: Freeze the inspector UI TravelPlan ships so CDN `latest` cannot change it out from under the demo.
 - **Scope**: Vendored JS + script tag pin. Does not publish Spaces or replace Flask BFF.
-- **Entry points**: `GET /` → `templates/index.html` → `/static/zeus_client_chat_trace.js?v=1.0.0`
+- **Entry points**: `GET /` → `templates/index.html` → `/static/zeus_client_chat_trace.js?v=1.2.3`
 
 ## 2. Architecture & Flow
 - **High-level flow**:
@@ -19,8 +19,8 @@
   5. Widget mounts only when `?debug=true` (or `enabled: true`). `app.js` also forwards that page flag to `POST /api/search?debug=true` so the BFF opts the turn into Zeus rewind (see `.grok/guides/DEBUG_QUERY_REWIND.md`).
 - **Key components**:
   - `scripts/vendor_trace.sh` — rebuild + copy
-  - `src/travel_planner/static/zeus_client_chat_trace.js` — pinned 1.0.0 inspector
-  - `src/travel_planner/templates/index.html` — script tag `?v=1.0.0`
+  - `src/travel_planner/static/zeus_client_chat_trace.js` — pinned 1.2.3 inspector (DaisyUI Detective IA + Turn traces UI detail)
+  - `src/travel_planner/templates/index.html` — script tag `?v=1.2.3`
   - `src/travel_planner/static/app.js` — `appendTraceCard`
 - **Data flow**: `/api/search` JSON (`trace` or `debug`) → `appendTraceCard`
 - **Dependencies**: Node only when re-vendoring; runtime is the copied IIFE.
@@ -31,9 +31,9 @@
 - **Install / bootstrap steps**:
   1. `cd ../zeus_client_chat_trace && npm install && npm run build` (or use the script below)
   2. `./scripts/vendor_trace.sh`
-  3. Confirm index.html uses `/static/zeus_client_chat_trace.js?v=1.0.0`
+  3. Confirm index.html uses `/static/zeus_client_chat_trace.js?v=1.2.3`
 - **Configuration**: `window.ZeusTraceConfig.hubBaseUrl` (default `http://127.0.0.1:9091` for Detective). `toolOrder` injected by Flask.
-- **Verification**: Open http://localhost:5050/?debug=true (Compose) or :5000; lightning toggle bottom-left; footer `v1.0.0`.
+- **Verification**: Open http://localhost:5050/?debug=true (Compose) or :5000; lightning toggle bottom-left; title **Turn traces**; turn dropdown above tabs; footer `v1.2.3`.
 
 ## 4. How to Use
 - **Primary workflow**:
@@ -54,12 +54,13 @@
   | Symptom | Likely Cause | Fix |
   |---------|--------------|-----|
   | No lightning toggle | Kill switch off | Add `?debug=true` |
-  | Old stacked DaisyUI cards | Stale 0.1.6 vendor or CDN latest | Re-run `vendor_trace.sh`; script src must be `/static/…?v=1.0.0` |
-  | Footer not `v1.0.0` | Cached JS | Hard refresh; bump `?v=` |
+  | Old dark DevTools tabs / CDN latest | Stale vendor or index still on jsDelivr | Re-run `vendor_trace.sh`; script src must be `/static/…?v=1.2.3` |
+  | Footer not `v1.2.3` | Cached JS | Hard refresh; bump `?v=` |
   | Detective hidden | Hub origin wrong | Set `hubBaseUrl` to the Hub the **browser** can reach |
 - **Debug checklist**:
-  - [ ] Network: `/static/zeus_client_chat_trace.js?v=1.0.0` 200
-  - [ ] `ZeusTrace.version === "1.0.0"`
+  - [ ] Network: `/static/zeus_client_chat_trace.js?v=1.2.3` 200
+  - [ ] `ZeusTrace.version === "1.2.3"`
+  - [ ] Inspector title is **Turn traces**; tabs include Overview / Diagnosis / Tools
   - [ ] Shadow root on `#zeus-trace-host`
 - **Known issues**: Leftover `static/trace.js` is unused.
 - **Logging & observability**: Browser console `[ZeusTrace] Failed to mount widget`
@@ -77,5 +78,9 @@
 ## 7. Changelog
 | Date | Author | Change |
 |------|--------|--------|
+| 2026-09-08 | Grok | Pin vendored inspector **1.2.3** (Turn traces UI detail); CDN also has `…/1.2.3/` + `latest` |
+| 2026-09-04 | Grok | Pin vendored inspector **1.2.2** (active-row stacking + title inset); CDN also has `…/1.2.2/` + `latest` |
+| 2026-09-03 | Grok | Pin vendored inspector **1.2.1** (turn dropdown); CDN also has `…/1.2.1/` + `latest` |
+| 2026-09-02 | Grok | Pin vendored inspector **1.2.0** (DaisyUI Detective IA); restore `/static/` script (was CDN latest) |
 | 2026-08-25 | Grok | Pin vendored inspector 1.0.0; drop CDN `latest` |
 | 2026-09-02 | Grok | Page `?debug=true` also forwards onto `/api/search` for Zeus rewind |

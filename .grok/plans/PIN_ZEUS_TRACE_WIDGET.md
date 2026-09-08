@@ -1,12 +1,13 @@
-# Plan: Pin Zeus Tracer 1.0.0
+# Plan: Pin Zeus Tracer 1.2.0
 
-**Date**: 2026-08-25
-**Task**: Pin TravelPlan to the vendored `zeus_client_chat_trace@1.0.0` inspector instead of CDN `latest`.
+**Date**: 2026-09-02
+**Status**: Superseded by `../zeus_client_chat_trace/.grok/plans/PUBLISH_CDN_1_2_3.md` (current pin **1.2.3**)
+**Task**: Pin TravelPlan to the vendored `zeus_client_chat_trace@1.2.0` inspector instead of CDN `latest`.
 **Priority**: High
 **Estimated Effort**: 0.5 hours / 3 steps
 
 ## 1. Context & Requirements
-- **Goal**: `templates/index.html` loads `/static/zeus_client_chat_trace.js?v=1.0.0`. That file is the sibling repo’s 1.0.0 inspector (dark `.tt-*` panel), not 0.1.6 stacked cards and not a floating CDN pointer.
+- **Goal**: `templates/index.html` loads `/static/zeus_client_chat_trace.js?v=1.2.0`. That file is the sibling repo’s 1.2.0 inspector (DaisyUI Detective IA, title **Turn traces**), not CDN `latest`.
 - **Constraints**: Keep Flask/BFF and `appendTraceCard` contract. Widget kill switch still defaults off (`?debug=true`).
 - **Assumptions**: `../zeus_client_chat_trace` is the source of truth; `dist/` is built at 1.0.0.
 - **Out of Scope**: Publishing CDN, changing `app.js` search flow, removing leftover `static/trace.js`.
