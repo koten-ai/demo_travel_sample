@@ -3,7 +3,7 @@
 **Date**: 2026-07-01
 **Feature**: Flask + DaisyUI travel search powered by Zeus Engine and LLM agent loop
 **Status**: Active
-**Related Plan**: `.grok/plans/COMBINE_LOADER_AND_STOP.md`; `.grok/plans/SEND_BUTTON_AS_CANCEL.md` (in-flight cancel); `.grok/plans/SHRINK_SEARCH_BOX.md`; `.grok/plans/WIDEN_SEARCH_BOX.md`; `.grok/plans/MULTI_LINE_SEARCH_BOX.md` (composer UI); `.grok/plans/IMPLEMENT_ZEUS_CLIENT_PYTHON_V2_3_0.md` (client 2.3.0); original app plan `.grok/plans/TRAVEL_PLANNER_APP.md`
+**Related Plan**: `.grok/plans/COMBINE_LOADER_AND_STOP.md`; `.grok/plans/SEND_BUTTON_AS_CANCEL.md` (in-flight cancel); `.grok/plans/SHRINK_SEARCH_BOX.md`; `.grok/plans/WIDEN_SEARCH_BOX.md`; `.grok/plans/MULTI_LINE_SEARCH_BOX.md` (composer UI); `.grok/plans/FIX_ZEUS_CLIENT_2_4_GAPS.md` (client 2.4.0); historical `.grok/plans/IMPLEMENT_ZEUS_CLIENT_PYTHON_V2_3_0.md`; original app plan `.grok/plans/TRAVEL_PLANNER_APP.md`
 
 ## 1. Overview
 
@@ -14,7 +14,7 @@
 ## 2. Architecture & Flow
 
 - **High-level flow**:
-  1. User submits preferences via the multi-line DaisyUI search box (`#searchInput` textarea; Enter submits, Shift+Enter newline). The hint under the box shows the installed `kotenai-zeus-client` version (`v2.3.0`). While `/api/search` is in flight, `#search-btn` keeps the same circular control but shows a spinning loader ring around a stop square; clicking it aborts the browser fetch (`AbortController`) and restores the send control. Cancelling does not stop the Zeus turn on the server.
+  1. User submits preferences via the multi-line DaisyUI search box (`#searchInput` textarea; Enter submits, Shift+Enter newline). The hint under the box shows the installed `kotenai-zeus-client` version (`v2.4.0`). While `/api/search` is in flight, `#search-btn` keeps the same circular control but shows a spinning loader ring around a stop square; clicking it aborts the browser fetch (`AbortController`) and restores the send control. Cancelling does not stop the Zeus turn on the server.
   2. Flask calls `search.run_search()` → `ZeusRuntime.agent.run_turn()` (`config.json` `default_mode`, often `analytics`). If the model dumps a fenced `<pipeline>` instead of a tool call, the sibling client recovers it as a Zeus `pipeline` hop (see `.grok/guides/PIPELINE_XML_AS_ANSWER.md`).
   3. LLM invokes Zeus V2 verbs (`search`, `find`, `project`, etc.).
   4. `turn_mapper` + `results_parser` extract destination rows from `trace.hops` / `tool_calls`.
@@ -36,7 +36,7 @@
   - `data/chat_requests/` — `travel_booking` catalog snapshot
   - `kotenai-zeus-client` — ZeusRuntime pip package (see `.grok/guides/ZEUS_CLIENT_V2_BFF.md`)
 
-- **Dependencies**: `kotenai-zeus-client` **2.3.0** (sibling `../zeus_client_python`; boot gate 2.3.x), Zeus server, LLM API key in `config.json`
+- **Dependencies**: `kotenai-zeus-client` **2.4.0** (sibling `../zeus_client_python`; boot gate 2.4.x), Zeus server, LLM API key in `config.json`
 
 ## 3. Setup
 
@@ -125,3 +125,4 @@
 | 2026-08-25 | Grok | In-flight cancel button uses DaisyUI `btn-error` (red) |
 | 2026-08-25 | Grok | Search UI version stamp is installed `kotenai-zeus-client` **2.3.0** (`zeus_client.__version__`) |
 | 2026-09-02 | Grok | `?debug=true` opts `/api/search` into Zeus rewind; see `DEBUG_QUERY_REWIND.md` |
+| 2026-09-15 | Grok | Client pin / UI stamp **2.4.0** (boot gate 2.4.x); see `FIX_ZEUS_CLIENT_2_4_GAPS.md` |

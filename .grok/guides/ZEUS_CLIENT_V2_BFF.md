@@ -3,7 +3,7 @@
 **Date**: 2026-08-21
 **Feature**: Flask BFF uses `zeus_client.ZeusRuntime` / `rt.agent.run_turn` while serving the existing DaisyUI UI
 **Status**: Active
-**Related Plan**: `.grok/plans/IMPLEMENT_ZEUS_CLIENT_PYTHON_V2_3_0.md` (supersedes `.grok/plans/CLEANUP_V2_BFF.md`)
+**Related Plan**: `.grok/plans/FIX_ZEUS_CLIENT_2_4_GAPS.md`; historical `.grok/plans/IMPLEMENT_ZEUS_CLIENT_PYTHON_V2_3_0.md` (supersedes `.grok/plans/CLEANUP_V2_BFF.md`)
 
 ## 1. Overview
 - **Purpose**: Keep TravelPlan’s HTML/CSS/JS unchanged while the backend talks to the current Zeus client public surface (`import zeus_client` → `ZeusRuntime`), not V1 `run_agent` free functions.
@@ -18,7 +18,7 @@
 - **High-level flow**:
   1. Package import calls `configure_paths()` (config dir, chat_requests dir, chat log).
   2. `create_app()` → `startup()` builds a process-scoped `ZeusRuntime` and optionally `rt.catalog.sync()`.
-  3. `POST /api/search` → `run_search()` → `rt.agent.run_turn` (omits `chat_request` so 2.3.0 `load_for_turn` merges SCOPE BRIEF + MINI-SCHEMA). Query `debug=true` (same kill switch as the tracer) passes `rewind=True` for that turn only.
+  3. `POST /api/search` → `run_search()` → `rt.agent.run_turn` (omits `chat_request` so 2.4.0 `load_for_turn` merges SCOPE BRIEF + MINI-SCHEMA). Query `debug=true` (same kill switch as the tracer) passes `rewind=True` for that turn only.
   4. `turn_mapper` peels G1 user answer, attaches detective onto `trace` (not the chat text), strips G2 keys, filters rows with `DEMO_OUTPUT_SCHEMA`, and runs the card waterfall.
   5. Flask returns the existing `/api/search` JSON keys; `app.js` renders cards and the CDN `latest` `zeus_client_chat_trace` inspector consumes `trace`.
 
@@ -28,7 +28,7 @@ UI (unchanged templates/static)
     → search.run_search
       → ZeusRuntime.agent.run_turn
       → turn_mapper + results_parser + answer_parser
-    → kotenai-zeus-client 2.3
+    → kotenai-zeus-client 2.4
       → LLM + Zeus Engine
 ```
 
@@ -40,7 +40,7 @@ UI (unchanged templates/static)
   - `src/travel_planner/tool_order.py` — static v1/v2 axes (pipeline not on Direct)
   - `src/travel_planner/app.py` — Flask routes
 - **Data flow**: nested config + overlay secrets → runtime → `TurnResult` → `results[]` / `answer` / `trace` → UI
-- **Dependencies**: `kotenai-zeus-client` **2.3.0** (sibling `../zeus_client_python`; boot gate 2.3.x), Flask, httpx. No FastAPI.
+- **Dependencies**: `kotenai-zeus-client` **2.4.0** (sibling `../zeus_client_python`; boot gate 2.4.x + `parse_pipeline_envelope`), Flask, httpx. No FastAPI.
 
 ### Design law (family SoT)
 
@@ -50,7 +50,7 @@ There is no repo named `zeus_chat_design`. TravelPlan follows:
 | --- | --- |
 | `../zeus_client_design` | Product how-to, L0 APIs, CHECKLIST |
 | `../zeus_chat_request` (or `../Zeus/ai/zeus_chat_request`) | BASE packs, COMPAT, Layer A, multi-round bags |
-| `../zeus_client_python` 2.3.0 | L1 SDK only — not a second law |
+| `../zeus_client_python` 2.4.0 | L1 SDK only — not a second law |
 
 | Design rule | TravelPlan behavior |
 | --- | --- |
@@ -61,7 +61,7 @@ There is no repo named `zeus_chat_design`. TravelPlan follows:
 | G2 ↛ UI | Detective, G2, `wish_i_knew` only on `trace` / debug; never in `answer` or card fields |
 | Cheap product | `ai_process_result=false` unless config/profile `hub` |
 | Path policy | `ignore_user_tool_path_hints=true` |
-| Semantic cache | Mapped; `enabled=false` unless operator opts in (Zeus ≥ 0.7.6) |
+| Semantic cache | Mapped via public `SemanticCacheConfig` (`enabled` only); off unless operator opts in (Zeus ≥ 0.7.6) |
 | Stamps | Library stamps `user=zeus_client`; never Hub `admin` |
 | Hashes | `verify_config.py` reads published stamp / bind; never invents `md5:` |
 | Transcript | `chat_store` + `SessionHandle` + `prior_messages`; never invent session ids |
@@ -92,7 +92,7 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
   ```bash
   pytest -q
   curl -sS http://localhost:5050/api/health
-  # expect client_import=zeus_client, zeus_client_version starting with 2.3,
+  # expect client_import=zeus_client, zeus_client_version starting with 2.4,
   # and pipeline_envelope_recovery: true
   ```
 
@@ -117,7 +117,7 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 | `llm api_key missing` | Empty `llm_provider.api_key` and no `XAI_API_KEY` | Set key in config or env |
 | `catalog not found for mode='travel_booking'` | Missing snapshot under `data/chat_requests` | Restore catalogs or enable `chat_requests_sync.on_startup` |
 | Empty cards, non-empty answer | Hops lacked name/description; markdown fallback failed | Inspect `trace.hops` / `structured_response.zeus_data` |
-| Answer is a fenced HTML `<pipeline>` dump, empty `results`/`hops` | Model wrote the plan as text; loop took `direct`, **or** the Docker image has a 2.3.0 client without `parse_pipeline_envelope` | Rebuild so sibling `../zeus_client_python` is editable at `/opt/zeus_client_python`; `GET /api/health` must show `pipeline_envelope_recovery: true`. See `.grok/guides/PIPELINE_XML_AS_ANSWER.md` |
+| Answer is a fenced HTML `<pipeline>` dump, empty `results`/`hops` | Model wrote the plan as text; loop took `direct`, **or** the Docker image has a client older than 2.4.0 without `parse_pipeline_envelope` | Rebuild so sibling `../zeus_client_python` is editable at `/opt/zeus_client_python`; `GET /api/health` must show `pipeline_envelope_recovery: true`. See `.grok/guides/PIPELINE_XML_AS_ANSWER.md` |
 | Docker can't reach Zeus | `localhost:8080` inside the container | Use `ZEUS_URL=http://host.docker.internal:8080` |
 | DeprecationWarning on `zeus_client_v2` | Alias import | Use `import zeus_client` |
 
@@ -153,3 +153,4 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 | 2026-08-25 | agent | Analytics XML pipeline dump: recover as tool call; raw analytics query (no booking prefix) |
 | 2026-08-25 | Grok | Homepage version stamp is imported `kotenai-zeus-client` **2.3.0** |
 | 2026-09-02 | Grok | `POST /api/search?debug=true` → `run_turn(rewind=True)` (see `DEBUG_QUERY_REWIND.md`) |
+| 2026-09-15 | Grok | Docs pin + boot gate **2.4.0** / 2.4.x; semantic cache via public `SemanticCacheConfig` |

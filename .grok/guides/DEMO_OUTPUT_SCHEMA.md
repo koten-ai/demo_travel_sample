@@ -25,7 +25,7 @@
   - `src/travel_planner/search.py` — runs the card waterfall after `run_turn`
   - `src/travel_planner/results_parser.py` — normalizes rows to card fields; unwraps JSON hotel blobs in `description`
 - **Data flow**: tool result rows → allowlist filter → `zeus_data` → destination cards
-- **Dependencies**: `kotenai-zeus-client` **2.3.x**. Allowlist is **app-owned** in `turn_mapper` — not a `run_turn` kwarg.
+- **Dependencies**: `kotenai-zeus-client` **2.4.x**. Allowlist is **app-owned** in `turn_mapper` — not a `run_turn` kwarg.
 
 ### Allowlist (BFF-owned)
 `DEMO_OUTPUT_SCHEMA` is applied after `rt.agent.run_turn` in `turn_mapper.filter_row_by_schema`. G2 keys (`wish_i_knew`, jailbreak scores, detective) are stripped even if a row contains them. Pack `response_output_schema.json` stays Zeus/chat_request SoT for Layer A terminate — this allowlist is only for destination **cards**.
@@ -88,3 +88,4 @@ Agent turns often end with **`get`** after **`find`** (hydrate full docs by node
 | 2026-07-09 | agent | Initial guide: demo output_schema for cleaner zeus_data |
 | 2026-08-21 | agent | Allowlist applied in BFF `turn_mapper` (not a `run_turn` kwarg) |
 | 2026-08-21 | agent | Strip Layer A G2 keys from cards (`g2_not_in_ui`) |
+| 2026-09-15 | Grok | Dependency pin noted as **2.4.x** |

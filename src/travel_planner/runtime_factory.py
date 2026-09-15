@@ -15,11 +15,11 @@ from zeus_client.adapters.catalog_fs.store import FsCatalogStore
 from zeus_client.adapters.llm_openai_compatible import OpenAICompatibleLlmClient
 from zeus_client.adapters.zeus_http import HttpxZeusPort
 from zeus_client.adapters.zeus_http.catalog_remote import HttpxCatalogRemote
-from zeus_client.config.loader import _parse_semantic_cache
 from zeus_client.config.models import (
     DebugPolicy,
     LlmProviderConfig,
     RuntimeConfig,
+    SemanticCacheConfig,
     ZeusEndpointConfig,
 )
 
@@ -55,6 +55,21 @@ def _as_bool(value: Any, default: bool) -> bool:
     if isinstance(value, bool):
         return value
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _semantic_cache_from_raw(raw: Any) -> SemanticCacheConfig:
+    """Map TravelPlan ``session.semantic_cache`` via public SemanticCacheConfig.
+
+    Nested recall/write/inject knobs stay at package defaults. Operators who need
+    the full L0 object should use a flat client config + ``load_runtime_config``.
+    """
+    if raw is None or raw is False:
+        return SemanticCacheConfig()
+    if raw is True:
+        return SemanticCacheConfig(enabled=True)
+    if isinstance(raw, Mapping):
+        return SemanticCacheConfig(enabled=_as_bool(raw.get("enabled"), False))
+    return SemanticCacheConfig()
 
 
 @dataclass
@@ -232,7 +247,7 @@ def build_runtime_config(
         else True
     )
     session_raw = dict(cfg["session"]) if isinstance(cfg.get("session"), dict) else {}
-    semantic_cache = _parse_semantic_cache(session_raw.get("semantic_cache"))
+    semantic_cache = _semantic_cache_from_raw(session_raw.get("semantic_cache"))
     tls_verify = _as_bool(zcfg.get("tls_verify", zcfg.get("verify_tls", True)), True)
 
     scope_creds: dict[str, dict[str, str]] = {}

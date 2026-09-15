@@ -37,7 +37,7 @@ LLM content ````html <pipeline>…````
   - `src/travel_planner/results_parser.py` / `turn_mapper.py` — hotel_rows + airportname + snippet rows
   - `Dockerfile` / `docker-compose.yml` — editable sibling client at `/opt/zeus_client_python`
 - **Data flow**: XML/JSON tags → pipeline args → Zeus hop body → `result_json` → allowlisted cards
-- **Dependencies**: `kotenai-zeus-client` 2.3.x sibling with `parse_pipeline_envelope`; Zeus pipeline accepts flattened step keys (`entity_type` next to `as`/`verb`)
+- **Dependencies**: `kotenai-zeus-client` **2.4.x** sibling with `parse_pipeline_envelope`; Zeus pipeline accepts flattened step keys (`entity_type` next to `as`/`verb`)
 
 ## 3. Setup
 - **Prerequisites**: Same as TravelPlan V2 BFF (Zeus + LLM + `travel-sample/_default`).
@@ -63,7 +63,7 @@ LLM content ````html <pipeline>…````
 ## 5. Debugging & Known Issues
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| `answer` is ````html <pipeline>…```` | Client without this recovery, or `pipeline` missing from tools | Rebuild/restart so sibling 2.3 with `parse_pipeline_envelope` is loaded; confirm catalog verbs include `pipeline` |
+| `answer` is ````html <pipeline>…```` | Client without this recovery, or `pipeline` missing from tools | Rebuild/restart so sibling 2.4 with `parse_pipeline_envelope` is loaded; confirm catalog verbs include `pipeline` |
 | `/api/health` `pipeline_envelope_recovery: false` | Docker image installed an older wheel; compose is not bind-mounting `../zeus_client_python` | `docker compose up -d --build travel-planner` |
 | Summary shown, `results=[]`, `hops=[]` | Recovery skipped (no Zeus port / no pipeline tool) | Check `trace.notes` and `GET /api/health` |
 | Summary shown, hop present, empty cards or one card named `Paris` | Rows in `data.hotel_rows` were skipped as meta, or `{city: Paris}` treated as a row | Mapper walks `as` bindings and skips predicates; inspect hop `result_json.data` |
@@ -99,3 +99,4 @@ LLM content ````html <pipeline>…````
 |------|--------|--------|
 | 2026-08-25 | agent | Initial guide: recover fenced pipeline XML; analytics prompt; airport cards |
 | 2026-08-25 | agent | Paris hotels: `data.hotel_rows` mapping; Docker editable client; health flag |
+| 2026-09-15 | Grok | Dependency pin noted as **2.4.x** with `parse_pipeline_envelope` |
