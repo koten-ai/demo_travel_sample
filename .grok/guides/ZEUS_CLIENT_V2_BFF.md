@@ -155,3 +155,4 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 | 2026-09-02 | Grok | `POST /api/search?debug=true` → `run_turn(rewind=True)` (see `DEBUG_QUERY_REWIND.md`) |
 | 2026-09-15 | Grok | Docs pin + boot gate **2.4.0** / 2.4.x; semantic cache via public `SemanticCacheConfig` |
 | 2026-11-02 | Grok | Boot gate accepts **2.5.4** (2.5.x family). See `.grok/plans/ACCEPT_ZEUS_CLIENT_2_5_4.md` |
+| 2026-11-02 | Grok | Version tests follow `REQUIRED_CLIENT_VERSION_PREFIX`. They do not pin patch `2.5.4`. See `.grok/plans/ALIGN_VERSION_GATE_TESTS.md` |
