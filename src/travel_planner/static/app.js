@@ -574,6 +574,36 @@
     }
   }
 
+  const ZEUS_HEALTH_INTERVAL_MS = 3000;
+  let zeusHealthInFlight = false;
+
+  function applyZeusHealth(online) {
+    const root = $("zeus-health");
+    const label = $("zeus-health-label");
+    if (!root || !label) return;
+    root.classList.toggle("zeus-health-online", online);
+    root.classList.toggle("zeus-health-offline", !online);
+    label.textContent = online ? "Zeus: Online" : "Zeus: Offline";
+  }
+
+  async function refreshZeusHealth() {
+    if (zeusHealthInFlight) return;
+    zeusHealthInFlight = true;
+    let online = false;
+    try {
+      const res = await fetch("/api/zeus/health", { cache: "no-store" });
+      if (res.ok) {
+        const body = await res.json();
+        online = body.online === true;
+      }
+    } catch (_) {
+      online = false;
+    } finally {
+      zeusHealthInFlight = false;
+    }
+    applyZeusHealth(online);
+  }
+
   function init() {
     $("search-form")?.addEventListener("submit", (e) => {
       e.preventDefault();
@@ -607,6 +637,8 @@
     $("reset-all-btn")?.addEventListener("click", resetAll);
 
     renderResults([]);
+    refreshZeusHealth();
+    setInterval(refreshZeusHealth, ZEUS_HEALTH_INTERVAL_MS);
   }
 
   if (document.readyState === "loading") {

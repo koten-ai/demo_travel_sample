@@ -15,8 +15,8 @@
 </head>
 <body class="bg-base-100 font-sans">
   <!-- Navbar -->
-  <div class="navbar bg-base-100 shadow-sm border-b">
-    <div class="max-w-7xl mx-auto w-full px-4">
+  <div class="navbar relative bg-base-100 shadow-sm border-b">
+    <div class="max-w-7xl mx-auto w-full px-4 flex items-center">
       <div class="navbar-start">
         <a href="/" class="flex items-center gap-3">
           <div class="w-10 h-10 bg-primary rounded-2xl flex items-center justify-center text-white text-2xl font-bold">✈️</div>
@@ -24,6 +24,10 @@
             <span class="text-2xl font-bold text-primary">TravelPlan</span>
           </div>
         </a>
+      </div>
+      <div id="zeus-health" class="zeus-health zeus-health-offline absolute right-4 top-1/2 -translate-y-1/2" role="status" aria-live="polite">
+        <span class="zeus-health-dot" aria-hidden="true"></span>
+        <span id="zeus-health-label">Zeus: Offline</span>
       </div>
       <!-- <div class="navbar-center hidden md:flex">
         <div class="tabs tabs-boxed bg-base-200 p-1">
