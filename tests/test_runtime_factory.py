@@ -151,11 +151,12 @@ def test_semantic_cache_opt_in(tmp_path):
     assert rt_cfg.semantic_cache.enabled is True
 
 
-def test_require_client_version_accepts_2_4():
+def test_require_client_version_accepts_2_5_4():
     from travel_planner.runtime_factory import require_client_version
 
     ver = require_client_version()
-    assert ver.startswith("2.4")
+    assert ver == "2.5.4"
+    assert ver.startswith("2.5")
 
 
 def test_require_client_version_needs_pipeline_envelope_recovery():
@@ -164,4 +165,4 @@ def test_require_client_version_needs_pipeline_envelope_recovery():
     from travel_planner.runtime_factory import require_client_version
 
     assert hasattr(layer_a, "parse_pipeline_envelope")
-    assert require_client_version().startswith("2.4")
+    assert require_client_version().startswith("2.5")

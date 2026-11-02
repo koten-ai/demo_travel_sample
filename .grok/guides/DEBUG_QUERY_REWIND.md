@@ -37,7 +37,7 @@
   - `src/travel_planner/static/app.js` — `pageDebugEnabled` / `searchApiUrl`
   - `../zeus_client_python/src/zeus_client/api/agent.py` — `run_turn(rewind=...)`
 - **Data flow**: page query → API query → bool `rewind` → client DebugPolicy overlay for that turn only
-- **Dependencies**: `kotenai-zeus-client` **2.4.x** with ZCP-112; Zeus 0.7.29+ to persist verbose tapes
+- **Dependencies**: `kotenai-zeus-client` **2.5.4** (2.5.x) with ZCP-112; Zeus 0.7.29+ to persist verbose tapes
 
 ## 3. Setup
 - **Prerequisites**: Running TravelPlan + Zeus; no extra env vars
@@ -105,3 +105,4 @@
 |------|--------|--------|
 | 2026-09-02 | Grok | `?debug=true` opts the search turn into Zeus rewind |
 | 2026-09-15 | Grok | Dependency pin noted as **2.4.x** (ZCP-112) |
+| 2026-11-02 | Grok | Dependency pin noted as **2.5.4** (2.5.x) |
