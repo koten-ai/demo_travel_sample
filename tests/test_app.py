@@ -7,6 +7,8 @@ from pathlib import Path
 
 import zeus_client
 
+from travel_planner.runtime_factory import REQUIRED_CLIENT_VERSION_PREFIX
+
 
 def test_index_renders(flask_client):
     response = flask_client.get("/")
@@ -141,7 +143,7 @@ def test_health_zeus_client_version(flask_client):
     assert body["status"] == "ok"
     assert body["app_version"]
     assert body["zeus_client_version"] == zeus_client.__version__
-    assert str(body["zeus_client_version"]).startswith("2.4")
+    assert str(body["zeus_client_version"]).startswith(REQUIRED_CLIENT_VERSION_PREFIX)
     assert body["client_import"] == "zeus_client"
     assert body["pipeline_envelope_recovery"] is True
 

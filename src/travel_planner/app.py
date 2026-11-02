@@ -12,6 +12,7 @@ from travel_planner.paths import PACKAGE_DIR, PROJECT_ROOT
 from travel_planner.search import run_search
 from travel_planner.tool_order import build_tool_order
 from travel_planner.zeus_config import configure_paths
+from travel_planner.zeus_health import probe_zeus_online
 
 _app: Flask | None = None
 
@@ -68,6 +69,16 @@ def create_app() -> Flask:
             tool_order=build_tool_order(CHATS),
             build_version=build_version,
             zeus_client_version=_zeus_client_version(),
+        )
+
+    @app.get("/api/zeus/health")
+    def api_zeus_health():
+        online = probe_zeus_online()
+        return jsonify(
+            {
+                "online": online,
+                "label": "Online" if online else "Offline",
+            }
         )
 
     @app.get("/api/health")
