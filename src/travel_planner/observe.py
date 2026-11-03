@@ -14,25 +14,12 @@ from zeus_client.application.middleware import MiddlewareContext, NoopMiddleware
 
 logger = logging.getLogger("travel_planner")
 
-_SAFE_FIELDS = ("tool_calls", "verb", "status", "answer_len")
-
 
 def _emit(event: str, ctx: MiddlewareContext, **fields: object) -> None:
     parts = [f"event={event}", f"turn_id={ctx.turn_id}", f"round={ctx.round}"]
-    for key in _SAFE_FIELDS:
-        if key in fields:
-            parts.append(f"{key}={fields[key]}")
+    for key, value in fields.items():
+        parts.append(f"{key}={value}")
     logger.debug("observe %s", " ".join(parts))
-
-
-def _tool_call_count(response: Mapping[str, Any]) -> int:
-    calls = response.get("tool_calls")
-    if calls is None or isinstance(calls, (str, bytes, Mapping)):
-        return 0
-    try:
-        return len(calls)
-    except TypeError:
-        return 0
 
 
 @dataclass
@@ -49,7 +36,7 @@ class ObserveMiddleware(NoopMiddleware):
         _emit("before_llm", ctx)
 
     async def after_llm(self, ctx: MiddlewareContext, response: Mapping[str, Any]) -> None:
-        _emit("after_llm", ctx, tool_calls=_tool_call_count(response))
+        _emit("after_llm", ctx, tool_calls=len(response.get("tool_calls") or ()))
 
     async def before_zeus(
         self, ctx: MiddlewareContext, name: str, args: dict[str, Any]

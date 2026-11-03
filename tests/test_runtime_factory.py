@@ -191,11 +191,11 @@ def test_build_runtime_middleware_is_security_then_observe(tmp_path, monkeypatch
     try:
         first = rt.agent
         second = rt.agent
-        assert first is second
-        assert [item.name for item in first.middleware.items] == ["security", "observe"]
-        assert isinstance(first.middleware.items[0], SecurityHooks)
-        assert isinstance(first.middleware.items[1], ObserveMiddleware)
-        assert first.middleware.items[1].critical is False
-        assert [item.name for item in second.middleware.items] == ["security", "observe"]
+        assert first is not second
+        for api in (first, second):
+            assert [item.name for item in api.middleware.items] == ["security", "observe"]
+            assert isinstance(api.middleware.items[0], SecurityHooks)
+            assert isinstance(api.middleware.items[1], ObserveMiddleware)
+            assert api.middleware.items[1].critical is False
     finally:
         asyncio.run(rt.aclose())

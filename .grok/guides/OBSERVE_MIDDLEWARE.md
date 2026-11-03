@@ -12,14 +12,14 @@
 
 ## 2. Architecture & Flow
 - **High-level flow**:
-  1. `build_runtime` constructs `_ObservedRuntime`, wires Zeus, LLM, and catalog, then caches one `AgentAPI`.
-  2. That `AgentAPI` starts with `SecurityHooks` (`name` `security`). `ObserveMiddleware` is appended once (`name` `observe`).
-  3. `ZeusRuntime.agent` on kotenai-zeus-client 2.5.4 would otherwise build a new `AgentAPI` (security only) on every access. The subclass returns the cached object, so a second `rt.agent` still has `security`, then `observe`.
+  1. `build_runtime` constructs `_ObservedRuntime` and wires Zeus, LLM, and catalog.
+  2. Each `rt.agent` access builds a new `AgentAPI`. That facade starts with `SecurityHooks` (`name` `security`). `_ObservedRuntime.agent` appends `ObserveMiddleware` (`name` `observe`) on that new facade.
+  3. `ZeusRuntime.agent` on kotenai-zeus-client 2.5.4 builds a security-only `AgentAPI` on every access. The subclass keeps that per-access lifecycle and adds observe each time. It does not cache the facade.
   4. During `run_turn`, the chain calls both hooks. Observe logs and returns. `before_zeus` returns the same args dict. `ctx.data` is not written.
   5. `search.py` still omits `chat_request` (catalog `load_for_turn`), and still passes session and `rewind`. Those arguments are unchanged.
 - **Key components**:
   - `src/travel_planner/observe.py` — `ObserveMiddleware` (`NoopMiddleware`, `critical = False`)
-  - `src/travel_planner/runtime_factory.py` — `_ObservedRuntime` caches the chain after services are wired
+  - `src/travel_planner/runtime_factory.py` — `_ObservedRuntime.agent` appends observe on each new `AgentAPI`
   - `src/travel_planner/search.py` — still calls `rt.agent.run_turn` with the same arguments (not modified)
 - **Data flow**: Hook name, `ctx.turn_id`, and `ctx.round` go to logger `travel_planner` at DEBUG. Some hooks add one extra count or name. User text, messages, tool arguments, Zeus bodies, prompts, and secrets are not logged.
 - **Dependencies**: `zeus_client.application.middleware.NoopMiddleware` from kotenai-zeus-client 2.5.x. No new env var and no feature flag.
@@ -63,7 +63,7 @@ observe event=before_zeus turn_id=turn-1 round=0 verb=find
   import logging
   logging.getLogger("travel_planner").setLevel(logging.DEBUG)
   ```
-- **Edge cases**: A missing `tool_calls` value logs `tool_calls=0`. A non-critical exception inside observe is isolated by the client chain and does not fail the turn. A second `rt.agent` access returns the same chain, not a second `observe` item.
+- **Edge cases**: A missing or empty `tool_calls` value logs `tool_calls=0`. A non-critical exception inside observe is isolated by the client chain and does not fail the turn. Each `rt.agent` access is a new facade with exactly one `observe` item after `security`.
 - **Limitations**: Logs are not a trace export. They do not include round-end, contract status, or policy decisions. Verb names are logged; treat a verb that echoes user text as sensitive at DEBUG.
 
 ## 5. Debugging & Known Issues
@@ -72,25 +72,25 @@ observe event=before_zeus turn_id=turn-1 round=0 verb=find
   |---------|--------------|-----|
   | No observe lines | Logger level is above DEBUG | Set `travel_planner` to DEBUG |
   | Chain is only `security` | Code used stock `ZeusRuntime.agent` instead of `build_runtime` | Use the runtime from `build_runtime` / `get_runtime` |
-  | Two `observe` items | `_cache_agent` ran twice on a new agent | It must no-op when `_agent_api` is already set |
+  | Two `observe` items on one facade | Observe was appended more than once on the same `AgentAPI` | `_ObservedRuntime.agent` must append it once per new facade |
 - **Debug checklist**:
-  - [ ] `rt.agent is` the next `rt.agent`
-  - [ ] `[item.name for item in rt.agent.middleware.items] == ["security", "observe"]`
+  - [ ] Two `rt.agent` reads are different objects
+  - [ ] Each read has `[item.name for item in rt.agent.middleware.items] == ["security", "observe"]`
   - [ ] DEBUG lines contain `event=`, `turn_id=`, and `round=` and not the user query
 - **Known issues**:
-  - **Stock `ZeusRuntime.agent` drops extra middleware** — caching is required on 2.5.4. Do not `add` observe on a temporary `rt.agent`.
+  - **Stock `ZeusRuntime.agent` drops extra middleware** — on 2.5.4 the property builds a security-only chain. Add observe inside `_ObservedRuntime.agent`, not on a facade you will discard.
 - **Logging & observability**: Logger name `travel_planner`, level DEBUG, message prefix `observe`.
 
 ## 6. Related Artifacts
 - **Files changed / owned by this feature**:
   - `src/travel_planner/observe.py` — six hooks and safe DEBUG fields
-  - `src/travel_planner/runtime_factory.py` — cached agent; security then observe
+  - `src/travel_planner/runtime_factory.py` — new `AgentAPI` per access; security then observe
   - `tests/test_observe_middleware.py` — six DEBUG lines, args identity, no payload, `ctx.data` untouched
-  - `tests/test_runtime_factory.py` — middleware order across two `rt.agent` accesses
+  - `tests/test_runtime_factory.py` — middleware order on two distinct `rt.agent` accesses
 - **Tickets**:
   - [ZD-24](https://kotenai.atlassian.net/browse/ZD-24) — observe-only middleware on the TravelPlan runtime
 - **Commits**:
-  - None yet — working tree only
+  - `8865554` — Add observe middleware after security on a cached AgentAPI
 - **Pull requests** (if applicable):
   - None yet
 
@@ -98,3 +98,4 @@ observe event=before_zeus turn_id=turn-1 round=0 verb=find
 | Date | Author | Change |
 |------|--------|--------|
 | 2026-11-03 | Grok | Log the six agent-loop moments at DEBUG after SecurityHooks, without changing the turn. |
+| 2026-11-03 | Grok | Build a new AgentAPI on each access and append observe there. Drop the process-lifetime cache. Log tool-call count with `len`. |

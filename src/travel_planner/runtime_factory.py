@@ -15,6 +15,7 @@ from zeus_client.adapters.catalog_fs.store import FsCatalogStore
 from zeus_client.adapters.llm_openai_compatible import OpenAICompatibleLlmClient
 from zeus_client.adapters.zeus_http import HttpxZeusPort
 from zeus_client.adapters.zeus_http.catalog_remote import HttpxCatalogRemote
+from zeus_client.api.agent import AgentAPI
 from zeus_client.config.models import (
     DebugPolicy,
     LlmProviderConfig,
@@ -349,29 +350,18 @@ def secret_overlay_from_config(raw: Mapping[str, Any] | None = None) -> dict[str
 
 
 class _ObservedRuntime(ZeusRuntime):
-    """One AgentAPI per runtime so observe stays after SecurityHooks.
+    """Fresh AgentAPI per access, with observe after SecurityHooks.
 
     ``ZeusRuntime.agent`` in kotenai-zeus-client 2.5.4 builds a new AgentAPI on
-    every access, and that chain starts with only SecurityHooks. A one-shot
-    ``middleware.add`` does not survive the next access.
+    every access, and that chain starts with only SecurityHooks. Appending
+    observe on that new facade keeps the client's per-access lifecycle.
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        self._agent_api: Any = None
-        super().__init__(*args, **kwargs)
-
-    def _cache_agent(self) -> Any:
-        if self._agent_api is None:
-            from zeus_client.api.agent import AgentAPI
-
-            api = AgentAPI(self)
-            api.middleware.add(ObserveMiddleware())
-            self._agent_api = api
-        return self._agent_api
-
     @property
-    def agent(self) -> Any:
-        return self._cache_agent()
+    def agent(self) -> AgentAPI:
+        api = AgentAPI(self)
+        api.middleware.add(ObserveMiddleware())
+        return api
 
 
 def build_runtime(
@@ -400,5 +390,4 @@ def build_runtime(
     rt.services.llm = llm
     rt.services.catalog = catalog
     rt.services.catalog_remote = remote
-    rt._cache_agent()
     return rt
