@@ -166,3 +166,36 @@ def test_require_client_version_needs_pipeline_envelope_recovery():
 
     assert hasattr(layer_a, "parse_pipeline_envelope")
     assert require_client_version().startswith(REQUIRED_CLIENT_VERSION_PREFIX)
+
+
+def test_build_runtime_middleware_is_security_then_observe(tmp_path, monkeypatch):
+    from zeus_client.application.middleware import SecurityHooks
+
+    from travel_planner.observe import ObserveMiddleware
+
+    cfg = _nested_travel_config(tmp_path)
+    (tmp_path / "chat_requests").mkdir()
+    cfg_path = tmp_path / "config.json"
+    cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
+
+    monkeypatch.delenv("ZEUS_URL", raising=False)
+    monkeypatch.setenv("ZEUS_CLIENT_CONFIG_DIR", str(tmp_path))
+    _not_in_docker(monkeypatch)
+
+    import travel_planner.runtime_factory as rf
+
+    monkeypatch.setattr(rf, "config_path", lambda: cfg_path)
+    monkeypatch.setattr(rf, "PROJECT_ROOT", tmp_path)
+
+    rt = build_runtime(raw=cfg, profile="development")
+    try:
+        first = rt.agent
+        second = rt.agent
+        assert first is not second
+        for api in (first, second):
+            assert [item.name for item in api.middleware.items] == ["security", "observe"]
+            assert isinstance(api.middleware.items[0], SecurityHooks)
+            assert isinstance(api.middleware.items[1], ObserveMiddleware)
+            assert api.middleware.items[1].critical is False
+    finally:
+        asyncio.run(rt.aclose())

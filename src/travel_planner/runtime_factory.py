@@ -15,6 +15,7 @@ from zeus_client.adapters.catalog_fs.store import FsCatalogStore
 from zeus_client.adapters.llm_openai_compatible import OpenAICompatibleLlmClient
 from zeus_client.adapters.zeus_http import HttpxZeusPort
 from zeus_client.adapters.zeus_http.catalog_remote import HttpxCatalogRemote
+from zeus_client.api.agent import AgentAPI
 from zeus_client.config.models import (
     DebugPolicy,
     LlmProviderConfig,
@@ -23,6 +24,7 @@ from zeus_client.config.models import (
     ZeusEndpointConfig,
 )
 
+from travel_planner.observe import ObserveMiddleware
 from travel_planner.paths import PROJECT_ROOT
 
 REQUIRED_CLIENT_VERSION_PREFIX = "2.5"
@@ -347,6 +349,21 @@ def secret_overlay_from_config(raw: Mapping[str, Any] | None = None) -> dict[str
     return overlay
 
 
+class _ObservedRuntime(ZeusRuntime):
+    """Fresh AgentAPI per access, with observe after SecurityHooks.
+
+    ``ZeusRuntime.agent`` in kotenai-zeus-client 2.5.4 builds a new AgentAPI on
+    every access, and that chain starts with only SecurityHooks. Appending
+    observe on that new facade keeps the client's per-access lifecycle.
+    """
+
+    @property
+    def agent(self) -> AgentAPI:
+        api = AgentAPI(self)
+        api.middleware.add(ObserveMiddleware())
+        return api
+
+
 def build_runtime(
     *,
     raw: Mapping[str, Any] | None = None,
@@ -361,7 +378,7 @@ def build_runtime(
     secrets = OverlaySecretStore(overlay=overlay)
     chat_dir = cfg.chat_requests_dir or str(PROJECT_ROOT / "data" / "chat_requests")
     catalog = FsCatalogStore(root=str(chat_dir))
-    rt = ZeusRuntime(cfg, secrets=secrets, catalog=catalog)
+    rt = _ObservedRuntime(cfg, secrets=secrets, catalog=catalog)
     zeus = HttpxZeusPort(endpoint=rt.config.zeus, secrets=secrets, journal=rt.journal)
     llm = OpenAICompatibleLlmClient(
         config=rt.config.llm,
