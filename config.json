@@ -1,0 +1,55 @@
+{
+  "profile": "development",
+  "client_floor": "client-floor-6.1",
+  "chat_requests_dir": "data/chat_requests",
+  "_comment": "Secret-free. Copy .env.example to .env and set LLM_API_KEY and ZEUS_PASSWORD. Do not put secrets in this file. A non-empty env var overrides url, auth mode, username, target, mode, base URL, and model.",
+  "zeus": {
+    "url": "http://localhost:8080",
+    "auth_mode": "basic",
+    "timeout_s": 30,
+    "enable_durable_sessions": true,
+    "scope_credentials": {
+      "travel-sample/_default": {
+        "username": "demo_1",
+        "password_env": "ZEUS_PASSWORD"
+      }
+    },
+    "scope_contracts": {
+      "travel-sample/_default": {
+        "analytics": {
+          "contract_id": "analytics_base5_2",
+          "contract_hash": "md5:5aacbf1d7a4d9d5de9436cdffbce050f"
+        }
+      }
+    }
+  },
+  "target": {
+    "bucket": "travel-sample",
+    "scope": "_default",
+    "collection": "_default"
+  },
+  "llm": {
+    "provider": "xai",
+    "base_url": "https://api.x.ai/v1",
+    "model": "grok-4.5-latest",
+    "api_key_env": "LLM_API_KEY",
+    "timeout_s": 120
+  },
+  "settings": {
+    "mode": "analytics",
+    "durable_sessions": true,
+    "ai_process_result": false,
+    "max_rounds": 12,
+    "ignore_user_tool_path_hints": true
+  },
+  "session": {
+    "semantic_cache": {
+      "enabled": false
+    }
+  },
+  "chat_requests_sync": {
+    "scopes": "from_contracts",
+    "modes": ["analytics"],
+    "on_startup": true
+  }
+}

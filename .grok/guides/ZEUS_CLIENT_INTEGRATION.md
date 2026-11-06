@@ -19,7 +19,7 @@
 ## 2. Architecture & Flow
 
 - **High-level flow**:
-  1. `import travel_planner` calls `configure_zeus_client()` (sets `ZEUS_CLIENT_CONFIG_DIR`, `ZEUS_CHAT_REQUESTS_DIR`, `CHAT_LOG_PATH`).
+  1. `import travel_planner` calls `configure_paths()` which loads `.env` (`override=False`, so Compose `ZEUS_URL` wins) and maps beer names onto empty `ZEUS_CLIENT_*` keys, then sets `ZEUS_CLIENT_CONFIG_DIR`, `ZEUS_CHAT_REQUESTS_DIR`, and `CHAT_LOG_PATH`.
   2. Flask `create_app()` → `startup()` → `build_runtime()` + optional `rt.catalog.sync()` + `load_chats_from_jsonl()`.
   3. `POST /api/search` → `run_search()` → `rt.agent.run_turn()` with `travel_booking` mode.
   4. Catalog resolved from `data/chat_requests/` via `ZEUS_CHAT_REQUESTS_DIR`.
@@ -27,10 +27,10 @@
 
 - **Import-order constraint**: Path env vars are set in `travel_planner.__init__` via `configure_paths()` before Flask builds the runtime.
 
-- **Config mapping**: Nested `config.json` (`zeus`, `llm_provider`, `samples`, `default_mode`) is mapped to `RuntimeConfig` in `runtime_factory.py`. `session.semantic_cache` uses public `SemanticCacheConfig` (`enabled` only; nested L0 knobs stay at package defaults). Inline secrets go into `OverlaySecretStore`, not onto the config object.
+- **Config mapping**: `config.json` (`zeus`, `target`, `llm`, `settings`, plus travel `scope_contracts` / `chat_requests_sync`) is mapped to `RuntimeConfig` in `runtime_factory.py`. A non-empty env var overrides the file for `ZEUS_URL`, `ZEUS_AUTH_MODE`, `ZEUS_USERNAME`, `ZEUS_BUCKET`, `ZEUS_SCOPE`, `ZEUS_COLLECTION`, `ZEUS_MODE`, `LLM_BASE_URL`, and `LLM_MODEL`. `llm.api_key_env` stays the name `LLM_API_KEY`. The Zeus user and `password_env` live on `zeus.scope_credentials` (`ZEUS_PASSWORD`). `session.semantic_cache` uses public `SemanticCacheConfig` (`enabled` only). `EnvSecretStore` reads those names from the process environment. Inline JSON secrets are not read.
 
 - **Key components**:
-  - `src/travel_planner/zeus_config.py` — env-based path configuration
+  - `src/travel_planner/zeus_config.py` — `.env` load plus path configuration
   - `src/travel_planner/search.py` — agent invocation
   - `src/travel_planner/chat_store.py` — JSONL chat persistence
   - `src/travel_planner/tool_order.py` — trace chart tool axes
@@ -44,21 +44,30 @@
 
 ## 3. Setup
 
-- **Prerequisites**: Python 3.11+, Zeus Engine with `travel-sample/_default`, LLM API key
+- **Prerequisites**: Python 3.11+, Zeus Engine with `travel-sample` / `_default` / `_default`, `LLM_API_KEY` in `.env`
 
-- **Environment variables**:
-  - `ZEUS_CLIENT_CONFIG_DIR` — Directory for `config.json` (default: project root via `configure_zeus_client()`)
+- **Environment variables** (names and defaults from `.env.example`):
+  - `ZEUS_URL` — `http://localhost:8080` (Compose sets `http://host.docker.internal:8080` and wins over the file)
+  - `ZEUS_BUCKET` — `travel-sample`
+  - `ZEUS_SCOPE` — `_default`
+  - `ZEUS_COLLECTION` — `hotel`
+  - `ZEUS_MODE` — `analytics`
+  - `ZEUS_PASSWORD` — basic-auth password (empty in `.env.example`)
+  - `LLM_API_KEY` — required LLM key (empty in `.env.example`; not stored in `config.json`)
+  - `LLM_BASE_URL` — `https://api.x.ai/v1`
+  - `LLM_MODEL` — `grok-4-1-fast-non-reasoning`
+  - `PORT` — `5000` (Compose publishes host `5050`)
+  - `ZEUS_CLIENT_CONFIG_DIR` — Directory for `config.json` (default: project root via `configure_paths()`)
   - `ZEUS_CHAT_REQUESTS_DIR` — Local catalog snapshots (default: `data/chat_requests`)
   - `CHAT_LOG_PATH` — Multi-turn chat JSONL (default: `data/chats.jsonl`)
-  - `ZEUS_URL` — Runtime override for Zeus base URL (optional)
 
 - **Install / bootstrap steps**:
   1. Clone `zeus_client_python` beside this repo under `koten-ai/`, then `pip install -e ".[dev]"`
-  2. `cp config.example.json config.json` and set LLM `api_key`
+  2. `cp .env.example .env` and set `LLM_API_KEY` and `ZEUS_PASSWORD`. Do not put the API key in `config.json`.
   3. Ensure `data/chat_requests/by_use_case/chat_request_travel_booking_v2.json` exists
   4. `python -m travel_planner` or `docker compose up --build`
 
-- **Configuration**: Project-root `config.json`. Legacy `zeus_connections`/`providers` keys still work; normalized on load.
+- **Configuration**: Committed `config.json` is secret-free. `scope_credentials["travel-sample/_default"]` holds `username` `demo_1` and `password_env` `ZEUS_PASSWORD`. `api_key_env` is `LLM_API_KEY`. There is no top-level `zeus.username` or `zeus.password_env`. Legacy nested `llm_provider` / `samples` keys still map when present; inline secret fields are ignored.
 
 - **Verification**: `pytest tests/test_app.py`; manual `GET /api/tool-order` returns `v1`/`v2` lists.
 
@@ -66,7 +75,7 @@
 
 - **Primary workflow** (developer):
   1. Install deps: `pip install -e .`
-  2. Configure Zeus URL and LLM key in `config.json`
+  2. Set `ZEUS_URL` and `LLM_API_KEY` in `.env` (from `.env.example`). Do not put the API key in `config.json`
   3. Run app; submit search queries
 
 - **Refreshing catalogs from Zeus** (optional):
@@ -95,7 +104,7 @@
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | `catalog not found for mode='travel_booking'` | Catalog missing | Restore `data/chat_requests/` snapshots or enable `chat_requests_sync.on_startup` |
-| `llm api_key missing` | Empty key in overlay + env | Set `llm_provider.api_key` or `XAI_API_KEY` |
+| `llm api_key missing` | `LLM_API_KEY` unset in the process | Set `LLM_API_KEY` in `.env` (see `.env.example`). Do not put the API key in `config.json` |
 | Config read from wrong path | `ZEUS_CLIENT_CONFIG_DIR` unset or import order wrong | Ensure `import travel_planner` runs before direct `zeus_client` imports |
 | `no Zeus URL configured` | Missing `zeus.url` | Fill `config.json` Zeus connection |
 | Wrong catalog loaded | Stale sync dir | Check `ZEUS_CHAT_REQUESTS_DIR` points at `data/chat_requests` |
@@ -116,14 +125,19 @@
 ## 6. Related Artifacts
 
 - **Files changed / owned by this feature**:
-  - `pyproject.toml`, `requirements.txt` — `kotenai-zeus-client` dependency
-  - `src/travel_planner/__init__.py` — early `configure_zeus_client()`
-  - `src/travel_planner/zeus_config.py` — env configuration
+  - `pyproject.toml`, `requirements.txt` — `kotenai-zeus-client` and `python-dotenv`
+  - `.env.example` — beer variable names; travel bucket `travel-sample`, scope `_default`, collection `_default`, `PORT=5000`; empty `LLM_API_KEY` and `ZEUS_PASSWORD`
+  - `config.json` — committed secret-free document
+  - `src/travel_planner/__init__.py` — early `configure_paths()`
+  - `src/travel_planner/zeus_config.py` — `.env` load (`override=False`, `interpolate=False`)
+  - `src/travel_planner/runtime_factory.py` — env overrides the file; `EnvSecretStore` reads secret names
   - `src/travel_planner/search.py`, `async_runner.py`, `app.py` — rewired imports
   - `src/travel_planner/chat_store.py`, `tool_order.py` — lifted from vendor
   - `data/chat_requests/` — travel_booking catalog
-  - `Dockerfile`, `docker-compose.yml` — removed `vendor/` mount
+  - `Dockerfile`, `docker-compose.yml` — removed `vendor/` mount; Compose bind-mounts `./.env` read-only
   - `vendor/` — **removed**
+- **Tickets**:
+  - [ZD-27](https://kotenai.atlassian.net/browse/ZD-27) — beer `.env` / `config.json` contract
 
 - **Upstream**: [koten-ai/zeus_client_python](https://github.com/koten-ai/zeus_client_python)
 
@@ -137,3 +151,6 @@
 | 2026-08-25 | Grok | UI + docs pin the in-use sibling as **2.3.0** (`zeus_client.__version__`); family gate stays `2.3` |
 | 2026-09-15 | Grok | Docs pin + boot gate **2.4.0** / 2.4.x (`parse_pipeline_envelope`) |
 | 2026-11-02 | Grok | Boot gate accepts **2.5.4** (2.5.x family) |
+| 2026-11-06 | Grok | ZD-27: load `.env.example` contract; `LLM_API_KEY` stays out of `config.json` |
+| 2026-11-06 | Grok | Env overrides file values; `EnvSecretStore` replaces the empty secret overlay |
+| 2026-11-06 | Grok | Removed `config.example.json`. `config.json` is the only config file |

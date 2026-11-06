@@ -12,6 +12,7 @@ license-files = ["LICENSE"]
 dependencies = [
     "flask==3.1.0",
     "httpx==0.28.1",
+    "python-dotenv>=1.0.0",
     "kotenai-zeus-client @ file:../zeus_client_python",  # sibling 2.5.4 in use (2.5.x family, ZCP-113 hub-join-v1)
 ]
 

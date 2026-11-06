@@ -4,4 +4,4 @@
 
 `kotenai-zeus-client` 2.5.x `load_for_turn` looks for `chat_request_{mode}_v2.json` under `{bucket}__{scope}` then the catalog root. Those copies are the same pin so a fresh clone can boot against Zeus 0.7.x (`client-floor-6.1`) before a live catalog sync.
 
-Startup sync (`chat_requests_sync.on_startup`) refreshes the inventory copy from Zeus when reachable.
+Startup sync (`chat_requests_sync.on_startup`) refreshes the `_default` scope copy from Zeus when reachable. The client resolves scope `_default` to the directory `travel-sample__default`.

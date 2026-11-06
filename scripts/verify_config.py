@@ -18,7 +18,7 @@ from travel_planner.runtime_factory import build_runtime  # noqa: E402
 from travel_planner.zeus_config import configure_paths  # noqa: E402
 
 MODES = ["analytics"]
-BUCKET, SCOPE = "travel-sample", "inventory"
+BUCKET, SCOPE = "travel-sample", "_default"
 
 
 def _status(ok: bool) -> str:

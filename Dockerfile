@@ -7,7 +7,8 @@ COPY demo_travel_sample/pyproject.toml demo_travel_sample/requirements.txt ./
 COPY zeus_client_python /opt/zeus_client_python
 COPY demo_travel_sample/src ./src
 COPY demo_travel_sample/data ./data
-COPY demo_travel_sample/config.example.json .
+# Secret-free config is baked in. Do not copy .env; Compose bind-mounts it.
+COPY demo_travel_sample/config.json .
 
 # Editable install so compose can bind-mount sibling source over /opt/zeus_client_python.
 RUN pip install --no-cache-dir -e /opt/zeus_client_python \

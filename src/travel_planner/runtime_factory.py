@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 from urllib.parse import urlparse
@@ -13,6 +12,7 @@ from urllib.parse import urlparse
 from zeus_client import ClientSettings, DataTarget, ZeusRuntime
 from zeus_client.adapters.catalog_fs.store import FsCatalogStore
 from zeus_client.adapters.llm_openai_compatible import OpenAICompatibleLlmClient
+from zeus_client.adapters.secrets_env.store import EnvSecretStore
 from zeus_client.adapters.zeus_http import HttpxZeusPort
 from zeus_client.adapters.zeus_http.catalog_remote import HttpxCatalogRemote
 from zeus_client.api.agent import AgentAPI
@@ -74,28 +74,6 @@ def _semantic_cache_from_raw(raw: Any) -> SemanticCacheConfig:
     return SemanticCacheConfig()
 
 
-@dataclass
-class OverlaySecretStore:
-    """Env names first; overlay holds inline secrets from config.json (never logged)."""
-
-    overlay: Mapping[str, str] = field(default_factory=dict)
-    environ: Mapping[str, str] = field(default_factory=lambda: os.environ)
-
-    def get(self, name: str) -> str | None:
-        if not name:
-            return None
-        val = self.overlay.get(name)
-        if val is not None and val != "":
-            return val
-        env_val = self.environ.get(name)
-        if env_val is None or env_val == "":
-            return None
-        return env_val
-
-    def __repr__(self) -> str:
-        return f"OverlaySecretStore(overlay_keys={len(self.overlay)})"
-
-
 def config_path() -> Path:
     root = Path(os.environ.get("ZEUS_CLIENT_CONFIG_DIR", str(PROJECT_ROOT)))
     return root / "config.json"
@@ -113,11 +91,22 @@ def load_app_config_dict() -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def _auth_mode(zcfg: Mapping[str, Any]) -> str:
-    mode = str(zcfg.get("auth_mode") or "none").lower()
-    if mode in ("none", "basic", "bearer", "session", "certificate"):
-        return mode
-    return "none"
+_AUTH_MODES = frozenset({"none", "basic", "bearer", "session", "certificate"})
+
+
+def _env_text(name: str) -> str:
+    return (os.environ.get(name) or "").strip()
+
+
+def _resolve_auth_mode(zcfg: Mapping[str, Any]) -> str:
+    """File mode, unless ZEUS_AUTH_MODE is a real mode."""
+    file_mode = str(zcfg.get("auth_mode") or "none").strip().lower()
+    if file_mode not in _AUTH_MODES:
+        file_mode = "none"
+    env_mode = _env_text("ZEUS_AUTH_MODE").lower()
+    if env_mode in _AUTH_MODES:
+        return env_mode
+    return file_mode
 
 
 def _provider_id(provider: Mapping[str, Any]) -> str:
@@ -169,6 +158,37 @@ def _scope_env_name(scope_key: str) -> str:
     return f"ZEUS_SCOPE_PASSWORD_{slug}"
 
 
+def _scope_credentials(
+    zcfg: Mapping[str, Any],
+    bucket: str,
+    scope: str,
+) -> dict[str, dict[str, str]]:
+    """Basic-auth identity lives on scope_credentials, keyed by bucket/scope.
+
+    A single entry follows ZEUS_BUCKET / ZEUS_SCOPE when that pair changes the
+    active key. ZEUS_USERNAME replaces the username on the active key.
+    """
+    scope_creds: dict[str, dict[str, str]] = {}
+    raw_creds = zcfg.get("scope_credentials") if isinstance(zcfg.get("scope_credentials"), dict) else {}
+    for key, cred in raw_creds.items():
+        if not isinstance(cred, dict):
+            continue
+        pwd_env = str(cred.get("password_env") or _scope_env_name(str(key)))
+        entry: dict[str, str] = {"password_env": pwd_env}
+        if cred.get("username"):
+            entry["username"] = str(cred["username"])
+        scope_creds[str(key)] = entry
+    active = f"{bucket}/{scope}"
+    if active not in scope_creds and len(scope_creds) == 1:
+        scope_creds[active] = dict(next(iter(scope_creds.values())))
+    env_user = _env_text("ZEUS_USERNAME")
+    if env_user:
+        current = dict(scope_creds.get(active) or {"password_env": "ZEUS_PASSWORD"})
+        current["username"] = env_user
+        scope_creds[active] = current
+    return scope_creds
+
+
 def _llm_block(cfg: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(cfg.get("llm_provider"), dict):
         return dict(cfg["llm_provider"])
@@ -200,10 +220,7 @@ def build_runtime_config(
     url = _rewrite_loopback_host(
         str(os.environ.get("ZEUS_URL") or zcfg.get("url") or "http://127.0.0.1:8080")
     )
-    auth_mode = _auth_mode(zcfg)
-    password_env = zcfg.get("password_env") or (
-        "ZEUS_PASSWORD" if auth_mode == "basic" else None
-    )
+    auth_mode = _resolve_auth_mode(zcfg)
     token_env = zcfg.get("token_env")
     if not token_env:
         if auth_mode == "bearer":
@@ -212,15 +229,26 @@ def build_runtime_config(
             token_env = "ZEUS_SESSION_ID"
 
     bucket, scope, collection = sample_triple(cfg)
+    bucket = _env_text("ZEUS_BUCKET") or bucket
+    scope = _env_text("ZEUS_SCOPE") or scope
+    collection = _env_text("ZEUS_COLLECTION") or collection
     mode = str(
         settings_raw.get("mode")
         or cfg.get("default_mode")
         or "travel_booking"
     )
+    if env_mode := _env_text("ZEUS_MODE"):
+        mode = env_mode
     provider_id = str(provider.get("provider") or _provider_id(provider))
     models = provider.get("models") if isinstance(provider.get("models"), list) else []
     model = str(provider.get("model") or (models[0] if models else "grok-4-1-fast-non-reasoning"))
+    if env_model := _env_text("LLM_MODEL"):
+        model = env_model
     api_key_env = _api_key_env(provider, provider_id)
+    base_url = str(provider.get("base_url") or "https://api.x.ai/v1")
+    if env_base := _env_text("LLM_BASE_URL"):
+        base_url = env_base
+    base_url = _rewrite_loopback_host(base_url)
 
     default_chat = str(PROJECT_ROOT / "data" / "chat_requests")
     chat_dir = (
@@ -252,16 +280,7 @@ def build_runtime_config(
     semantic_cache = _semantic_cache_from_raw(session_raw.get("semantic_cache"))
     tls_verify = _as_bool(zcfg.get("tls_verify", zcfg.get("verify_tls", True)), True)
 
-    scope_creds: dict[str, dict[str, str]] = {}
-    raw_creds = zcfg.get("scope_credentials") if isinstance(zcfg.get("scope_credentials"), dict) else {}
-    for key, cred in raw_creds.items():
-        if not isinstance(cred, dict):
-            continue
-        pwd_env = str(cred.get("password_env") or _scope_env_name(str(key)))
-        entry: dict[str, str] = {"password_env": pwd_env}
-        if cred.get("username"):
-            entry["username"] = str(cred["username"])
-        scope_creds[str(key)] = entry
+    scope_creds = _scope_credentials(zcfg, bucket, scope)
 
     scope_contracts = {}
     if isinstance(cfg.get("scope_contracts"), dict):
@@ -283,8 +302,8 @@ def build_runtime_config(
         zeus=ZeusEndpointConfig(
             url=url,
             auth_mode=auth_mode,  # type: ignore[arg-type]
-            username=(zcfg.get("username") or None) or None,
-            password_env=password_env,
+            username=None,
+            password_env=None,
             token_env=token_env,
             timeout_s=float(zcfg.get("timeout_s") or 30.0),
             tls_verify=tls_verify,
@@ -293,9 +312,7 @@ def build_runtime_config(
         target=DataTarget(bucket=bucket, scope=scope, collection=collection),
         llm=LlmProviderConfig(
             provider=provider_id,
-            base_url=_rewrite_loopback_host(
-                str(provider.get("base_url") or "https://api.x.ai/v1")
-            ),
+            base_url=base_url,
             model=model,
             api_key_env=api_key_env,
             timeout_s=float(provider.get("timeout_s") or 120.0),
@@ -314,39 +331,6 @@ def build_runtime_config(
         scope_contracts=scope_contracts,
         semantic_cache=semantic_cache,
     )
-
-
-def secret_overlay_from_config(raw: Mapping[str, Any] | None = None) -> dict[str, str]:
-    """Map inline config secrets onto env-name keys for OverlaySecretStore."""
-    cfg = dict(raw or load_app_config_dict())
-    zcfg: dict[str, Any] = dict(cfg["zeus"]) if isinstance(cfg.get("zeus"), dict) else {}
-    provider = _llm_block(cfg)
-    overlay: dict[str, str] = {}
-
-    auth_mode = _auth_mode(zcfg)
-    password_env = str(zcfg.get("password_env") or "ZEUS_PASSWORD")
-    if auth_mode == "basic" and zcfg.get("password"):
-        overlay[password_env] = str(zcfg["password"])
-
-    raw_creds = zcfg.get("scope_credentials") if isinstance(zcfg.get("scope_credentials"), dict) else {}
-    for key, cred in raw_creds.items():
-        if not isinstance(cred, dict) or not cred.get("password"):
-            continue
-        pwd_env = str(cred.get("password_env") or _scope_env_name(str(key)))
-        overlay[pwd_env] = str(cred["password"])
-        if auth_mode == "basic" and not overlay.get(password_env):
-            overlay[password_env] = str(cred["password"])
-
-    if auth_mode == "bearer" and zcfg.get("bearer_token"):
-        overlay[str(zcfg.get("token_env") or "ZEUS_BEARER_TOKEN")] = str(zcfg["bearer_token"])
-    if auth_mode == "session" and zcfg.get("session_id"):
-        overlay[str(zcfg.get("token_env") or "ZEUS_SESSION_ID")] = str(zcfg["session_id"])
-
-    provider_id = str(provider.get("provider") or _provider_id(provider))
-    api_key_env = _api_key_env(provider, provider_id)
-    if provider.get("api_key"):
-        overlay[api_key_env] = str(provider["api_key"])
-    return overlay
 
 
 class _ObservedRuntime(ZeusRuntime):
@@ -374,8 +358,7 @@ def build_runtime(
     cfg_raw = dict(raw or load_app_config_dict())
     prof = profile or str(cfg_raw.get("profile") or "development")
     cfg = build_runtime_config(raw=cfg_raw, profile=prof)
-    overlay = secret_overlay_from_config(cfg_raw)
-    secrets = OverlaySecretStore(overlay=overlay)
+    secrets = EnvSecretStore()
     chat_dir = cfg.chat_requests_dir or str(PROJECT_ROOT / "data" / "chat_requests")
     catalog = FsCatalogStore(root=str(chat_dir))
     rt = _ObservedRuntime(cfg, secrets=secrets, catalog=catalog)

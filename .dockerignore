@@ -3,6 +3,6 @@ __pycache__
 .git
 .grok
 data
-config.json
+.env
 mcps
 *.md
