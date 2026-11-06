@@ -49,11 +49,10 @@ def test_env_contract_keeps_secrets_out_of_committed_json() -> None:
     example = _text(".env.example")
     gitignore = _text(".gitignore")
     config = json.loads(_text("config.json"))
-    assert _text("config.json") == _text("config.example.json")
     assert "ZEUS_URL=http://localhost:8080" in example
     assert "ZEUS_BUCKET=travel-sample" in example
-    assert "ZEUS_SCOPE=inventory" in example
-    assert "ZEUS_COLLECTION=hotel" in example
+    assert "ZEUS_SCOPE=_default" in example
+    assert "ZEUS_COLLECTION=_default" in example
     assert "ZEUS_MODE=analytics" in example
     assert "ZEUS_AUTH_MODE=basic" in example
     assert "ZEUS_USERNAME=demo_1" in example
@@ -72,28 +71,27 @@ def test_env_contract_keeps_secrets_out_of_committed_json() -> None:
     assert "# ZEUS_BEARER_TOKEN=" in example
     ignore_lines = gitignore.splitlines()
     assert ".env" in ignore_lines
-    assert "config.dev.json" in ignore_lines
     assert "config.json" not in ignore_lines
-    assert config["zeus"]["password_env"] == "ZEUS_PASSWORD"
-    assert config["zeus"]["auth_mode"] == "ZEUS_AUTH_MODE"
-    assert config["zeus"]["username"] == "demo_1"
-    assert config["llm"]["base_url"] == "LLM_BASE_URL"
-    assert config["llm"]["model"] == "LLM_MODEL"
+    assert "username" not in config["zeus"]
+    assert "password_env" not in config["zeus"]
+    assert config["zeus"]["auth_mode"] == "basic"
+    assert config["llm"]["base_url"] == "https://api.x.ai/v1"
+    assert config["llm"]["model"] == "grok-4-1-fast-non-reasoning"
     assert config["llm"]["api_key_env"] == "LLM_API_KEY"
-    assert config["settings"]["mode"] == "ZEUS_MODE"
+    assert config["settings"]["mode"] == "analytics"
     assert config["settings"]["durable_sessions"] is True
     assert config["session"]["semantic_cache"]["enabled"] is False
     assert config["client_floor"] == "client-floor-6.1"
     assert config["target"] == {
         "bucket": "travel-sample",
-        "scope": "inventory",
-        "collection": "hotel",
+        "scope": "_default",
+        "collection": "_default",
     }
-    creds = config["zeus"]["scope_credentials"]["travel-sample/inventory"]
+    creds = config["zeus"]["scope_credentials"]["travel-sample/_default"]
     assert creds["username"] == "demo_1"
     assert creds["password_env"] == "ZEUS_PASSWORD"
     assert "password" not in creds
-    assert config["zeus"]["scope_contracts"]["travel-sample/inventory"]["analytics"]["contract_id"]
+    assert config["zeus"]["scope_contracts"]["travel-sample/_default"]["analytics"]["contract_id"]
     assert config["chat_requests_sync"]["on_startup"] is True
     _walk_no_inline_secrets(config)
 
@@ -127,3 +125,23 @@ def test_password_containing_dollar_is_unchanged_after_load_dotenv(tmp_path, mon
 
     configure_paths()
     assert os.environ["ZEUS_PASSWORD"] == password
+
+
+def test_main_binds_host_and_port_from_env(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class _App:
+        def run(self, **kwargs: object) -> None:
+            captured.update(kwargs)
+
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    monkeypatch.setenv("PORT", "5001")
+    monkeypatch.delenv("ENVIRONMENT", raising=False)
+    monkeypatch.setattr("travel_planner.__main__.create_app", lambda: _App())
+
+    from travel_planner.__main__ import main
+
+    main()
+    assert captured["host"] == "127.0.0.1"
+    assert captured["port"] == 5001
+    assert captured["debug"] is False

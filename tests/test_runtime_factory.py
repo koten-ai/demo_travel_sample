@@ -6,11 +6,27 @@ import asyncio
 import json
 import os
 
+from zeus_client.adapters.secrets_env.store import EnvSecretStore
+
 from travel_planner.runtime_factory import (
     REQUIRED_CLIENT_VERSION_PREFIX,
     build_runtime,
     build_runtime_config,
-    secret_overlay_from_config,
+)
+
+_ENV_OVERRIDES = (
+    "ZEUS_URL",
+    "ZEUS_AUTH_MODE",
+    "ZEUS_USERNAME",
+    "ZEUS_BUCKET",
+    "ZEUS_SCOPE",
+    "ZEUS_COLLECTION",
+    "ZEUS_MODE",
+    "ZEUS_PASSWORD",
+    "LLM_BASE_URL",
+    "LLM_MODEL",
+    "LLM_API_KEY",
+    "ZEUS_CLIENT_FLOOR",
 )
 
 
@@ -25,24 +41,26 @@ def _not_in_docker(monkeypatch):
     monkeypatch.setattr("travel_planner.runtime_factory.os.path.exists", exists)
 
 
-def _sentinel_travel_config(tmp_path) -> dict:
-    """Beer-shaped document. Inline secrets must not be promoted."""
+def _isolate_env(monkeypatch):
+    """Drop process env that would override the fixture document."""
+    for name in _ENV_OVERRIDES:
+        monkeypatch.delenv(name, raising=False)
+
+
+def _travel_config(tmp_path) -> dict:
+    """Secret-free document. Callers add inline secrets only to prove they are ignored."""
     return {
         "profile": "development",
         "client_floor": "client-floor-6.1",
         "chat_requests_dir": str(tmp_path / "chat_requests"),
         "zeus": {
             "url": "http://host.docker.internal:8080",
-            "auth_mode": "ZEUS_AUTH_MODE",
-            "username": "demo_1",
-            "password_env": "ZEUS_PASSWORD",
-            "password": "inline-pass",
+            "auth_mode": "basic",
             "enable_durable_sessions": True,
             "scope_credentials": {
                 "travel-sample/inventory": {
                     "username": "demo_1",
                     "password_env": "ZEUS_PASSWORD",
-                    "password": "scope-pass",
                 }
             },
             "scope_contracts": {
@@ -61,13 +79,12 @@ def _sentinel_travel_config(tmp_path) -> dict:
         },
         "llm": {
             "provider": "xai",
-            "base_url": "LLM_BASE_URL",
-            "model": "LLM_MODEL",
+            "base_url": "https://api.x.ai/v1",
+            "model": "grok-4-1-fast-non-reasoning",
             "api_key_env": "LLM_API_KEY",
-            "api_key": "test-key",
         },
         "settings": {
-            "mode": "ZEUS_MODE",
+            "mode": "analytics",
             "durable_sessions": True,
             "ai_process_result": False,
         },
@@ -75,13 +92,9 @@ def _sentinel_travel_config(tmp_path) -> dict:
     }
 
 
-def test_build_runtime_config_resolves_sentinels_and_skips_inline_secrets(tmp_path, monkeypatch):
-    cfg = _sentinel_travel_config(tmp_path)
-    monkeypatch.delenv("ZEUS_URL", raising=False)
-    monkeypatch.setenv("ZEUS_AUTH_MODE", "basic")
-    monkeypatch.setenv("ZEUS_MODE", "analytics")
-    monkeypatch.setenv("LLM_BASE_URL", "https://llm.example/v1")
-    monkeypatch.setenv("LLM_MODEL", "grok-test")
+def test_build_runtime_config_uses_file_when_env_unset(tmp_path, monkeypatch):
+    cfg = _travel_config(tmp_path)
+    _isolate_env(monkeypatch)
     _not_in_docker(monkeypatch)
 
     rt_cfg = build_runtime_config(raw=cfg, profile="development")
@@ -89,11 +102,12 @@ def test_build_runtime_config_resolves_sentinels_and_skips_inline_secrets(tmp_pa
     assert rt_cfg.target.bucket == "travel-sample"
     assert rt_cfg.target.scope == "inventory"
     assert rt_cfg.target.collection == "hotel"
+    assert rt_cfg.zeus.username is None
+    assert rt_cfg.zeus.password_env is None
     assert rt_cfg.llm.provider == "xai"
-    assert rt_cfg.llm.base_url == "https://llm.example/v1"
-    assert rt_cfg.llm.model == "grok-test"
+    assert rt_cfg.llm.base_url == "https://api.x.ai/v1"
+    assert rt_cfg.llm.model == "grok-4-1-fast-non-reasoning"
     assert rt_cfg.llm.api_key_env == "LLM_API_KEY"
-    assert rt_cfg.zeus.password_env == "ZEUS_PASSWORD"
     assert rt_cfg.zeus.auth_mode == "basic"
     assert rt_cfg.zeus.url == "http://127.0.0.1:8080"
     assert rt_cfg.settings.ai_process_result is False
@@ -107,37 +121,62 @@ def test_build_runtime_config_resolves_sentinels_and_skips_inline_secrets(tmp_pa
     assert cred["username"] == "demo_1"
     assert cred["password_env"] == "ZEUS_PASSWORD"
     assert "password" not in cred
-    overlay = secret_overlay_from_config(cfg)
-    assert overlay == {}
-    assert "test-key" not in overlay.values()
-    assert "inline-pass" not in overlay.values()
-    assert "scope-pass" not in overlay.values()
 
 
-def test_inline_api_key_is_not_in_the_overlay(tmp_path, monkeypatch):
-    cfg = _sentinel_travel_config(tmp_path)
-    monkeypatch.delenv("ZEUS_URL", raising=False)
-    monkeypatch.setenv("LLM_BASE_URL", "https://api.x.ai/v1")
-    monkeypatch.setenv("LLM_MODEL", "grok-4-1-fast-non-reasoning")
+def test_env_overrides_file_identity_target_and_llm(tmp_path, monkeypatch):
+    cfg = _travel_config(tmp_path)
+    _isolate_env(monkeypatch)
+    monkeypatch.setenv("ZEUS_USERNAME", "other-user")
+    monkeypatch.setenv("ZEUS_BUCKET", "other-bucket")
+    monkeypatch.setenv("ZEUS_SCOPE", "other-scope")
+    monkeypatch.setenv("ZEUS_COLLECTION", "other-coll")
+    monkeypatch.setenv("ZEUS_AUTH_MODE", "bearer")
+    monkeypatch.setenv("ZEUS_MODE", "search")
+    monkeypatch.setenv("LLM_BASE_URL", "https://llm.example/v1")
+    monkeypatch.setenv("LLM_MODEL", "grok-test")
+
     rt_cfg = build_runtime_config(raw=cfg, profile="development")
-    assert rt_cfg.llm.base_url == "https://api.x.ai/v1"
-    assert rt_cfg.llm.api_key_env == "LLM_API_KEY"
-    overlay = secret_overlay_from_config(cfg)
-    assert "test-key" not in overlay.values()
-    assert "LLM_API_KEY" not in overlay
+    assert rt_cfg.zeus.username is None
+    assert rt_cfg.zeus.password_env is None
+    active = rt_cfg.zeus.scope_credentials["other-bucket/other-scope"]
+    assert active["username"] == "other-user"
+    assert active["password_env"] == "ZEUS_PASSWORD"
+    assert rt_cfg.zeus.scope_credentials["travel-sample/inventory"]["username"] == "demo_1"
+    assert rt_cfg.zeus.auth_mode == "bearer"
+    assert rt_cfg.target.bucket == "other-bucket"
+    assert rt_cfg.target.scope == "other-scope"
+    assert rt_cfg.target.collection == "other-coll"
+    assert rt_cfg.settings.mode == "search"
+    assert rt_cfg.llm.base_url == "https://llm.example/v1"
+    assert rt_cfg.llm.model == "grok-test"
 
 
-def test_build_runtime_from_sentinel_config(tmp_path, monkeypatch):
-    cfg = _sentinel_travel_config(tmp_path)
+def test_json_secrets_are_not_read(tmp_path, monkeypatch):
+    cfg = _travel_config(tmp_path)
+    cfg["llm"]["api_key"] = "test-key"
+    cfg["zeus"]["password"] = "inline-pass"
+    (tmp_path / "chat_requests").mkdir()
+    _isolate_env(monkeypatch)
+    _not_in_docker(monkeypatch)
+
+    rt = build_runtime(raw=cfg, profile="development")
+    try:
+        assert isinstance(rt.services.secrets, EnvSecretStore)
+        assert rt.services.secrets.get("LLM_API_KEY") is None
+        assert rt.services.secrets.get("ZEUS_PASSWORD") is None
+        assert rt.config.llm.api_key_env == "LLM_API_KEY"
+        assert rt.config.llm.base_url == "https://api.x.ai/v1"
+    finally:
+        asyncio.run(rt.aclose())
+
+
+def test_build_runtime_from_config(tmp_path, monkeypatch):
+    cfg = _travel_config(tmp_path)
     (tmp_path / "chat_requests").mkdir()
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
 
-    monkeypatch.delenv("ZEUS_URL", raising=False)
-    monkeypatch.setenv("ZEUS_AUTH_MODE", "basic")
-    monkeypatch.setenv("ZEUS_MODE", "analytics")
-    monkeypatch.setenv("LLM_BASE_URL", "https://api.x.ai/v1")
-    monkeypatch.setenv("LLM_MODEL", "grok-test")
+    _isolate_env(monkeypatch)
     monkeypatch.setenv("ZEUS_CLIENT_CONFIG_DIR", str(tmp_path))
     _not_in_docker(monkeypatch)
 
@@ -150,7 +189,10 @@ def test_build_runtime_from_sentinel_config(tmp_path, monkeypatch):
     try:
         assert rt.config.settings.mode == "analytics"
         assert rt.config.target.bucket == "travel-sample"
+        assert rt.config.zeus.username is None
+        assert rt.config.zeus.scope_credentials["travel-sample/inventory"]["username"] == "demo_1"
         assert rt.config.llm.api_key_env == "LLM_API_KEY"
+        assert isinstance(rt.services.secrets, EnvSecretStore)
         assert rt.services.zeus is not None
         assert rt.services.llm is not None
         assert rt.services.catalog is not None
@@ -159,29 +201,19 @@ def test_build_runtime_from_sentinel_config(tmp_path, monkeypatch):
         asyncio.run(rt.aclose())
 
 
-def test_zeus_url_env_overrides_config_and_auth_mode(tmp_path, monkeypatch):
-    cfg = _sentinel_travel_config(tmp_path)
-    cfg["zeus"]["auth_mode"] = "basic"
+def test_zeus_url_env_overrides_config(tmp_path, monkeypatch):
+    cfg = _travel_config(tmp_path)
+    _isolate_env(monkeypatch)
     monkeypatch.setenv("ZEUS_URL", "http://zeus.example:8080")
-    monkeypatch.setenv("ZEUS_AUTH_MODE", "bearer")
     rt_cfg = build_runtime_config(raw=cfg, profile="development")
     assert rt_cfg.zeus.url == "http://zeus.example:8080"
-    assert rt_cfg.zeus.auth_mode == "bearer"
-
-
-def test_auth_mode_file_value_stays_when_zeus_url_unset(tmp_path, monkeypatch):
-    cfg = _sentinel_travel_config(tmp_path)
-    cfg["zeus"]["auth_mode"] = "basic"
-    monkeypatch.delenv("ZEUS_URL", raising=False)
-    monkeypatch.setenv("ZEUS_AUTH_MODE", "bearer")
-    rt_cfg = build_runtime_config(raw=cfg, profile="development")
     assert rt_cfg.zeus.auth_mode == "basic"
 
 
 def test_client_floor_from_config_and_env(tmp_path, monkeypatch):
-    cfg = _sentinel_travel_config(tmp_path)
+    cfg = _travel_config(tmp_path)
     cfg["client_floor"] = "client-floor-6"
-    monkeypatch.delenv("ZEUS_CLIENT_FLOOR", raising=False)
+    _isolate_env(monkeypatch)
     rt_cfg = build_runtime_config(raw=cfg, profile="development")
     assert rt_cfg.client_floor == "client-floor-6"
     monkeypatch.setenv("ZEUS_CLIENT_FLOOR", "client-floor-6.1")
@@ -189,16 +221,19 @@ def test_client_floor_from_config_and_env(tmp_path, monkeypatch):
     assert rt_cfg.client_floor == "client-floor-6.1"
 
 
-def test_ai_process_result_can_be_enabled(tmp_path):
-    cfg = _sentinel_travel_config(tmp_path)
+def test_ai_process_result_can_be_enabled(tmp_path, monkeypatch):
+    cfg = _travel_config(tmp_path)
     cfg["settings"] = {"ai_process_result": True, "mode": "travel_booking"}
+    _isolate_env(monkeypatch)
     rt_cfg = build_runtime_config(raw=cfg, profile="development")
     assert rt_cfg.settings.ai_process_result is True
+    assert rt_cfg.settings.mode == "travel_booking"
 
 
-def test_semantic_cache_opt_in(tmp_path):
-    cfg = _sentinel_travel_config(tmp_path)
+def test_semantic_cache_opt_in(tmp_path, monkeypatch):
+    cfg = _travel_config(tmp_path)
     cfg["session"] = {"semantic_cache": {"enabled": True}}
+    _isolate_env(monkeypatch)
     rt_cfg = build_runtime_config(raw=cfg, profile="development")
     assert rt_cfg.semantic_cache.enabled is True
 
@@ -224,16 +259,12 @@ def test_build_runtime_middleware_is_security_then_observe(tmp_path, monkeypatch
 
     from travel_planner.observe import ObserveMiddleware
 
-    cfg = _sentinel_travel_config(tmp_path)
+    cfg = _travel_config(tmp_path)
     (tmp_path / "chat_requests").mkdir()
     cfg_path = tmp_path / "config.json"
     cfg_path.write_text(json.dumps(cfg), encoding="utf-8")
 
-    monkeypatch.delenv("ZEUS_URL", raising=False)
-    monkeypatch.setenv("ZEUS_AUTH_MODE", "basic")
-    monkeypatch.setenv("ZEUS_MODE", "analytics")
-    monkeypatch.setenv("LLM_BASE_URL", "https://api.x.ai/v1")
-    monkeypatch.setenv("LLM_MODEL", "grok-test")
+    _isolate_env(monkeypatch)
     monkeypatch.setenv("ZEUS_CLIENT_CONFIG_DIR", str(tmp_path))
     _not_in_docker(monkeypatch)
 

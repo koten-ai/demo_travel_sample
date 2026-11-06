@@ -34,13 +34,13 @@ UI (unchanged templates/static)
 ```
 
 - **Key components**:
-  - `src/travel_planner/runtime_factory.py` — secret-free `config.json` sentinels → `RuntimeConfig` + HTTP/LLM/catalog ports
+  - `src/travel_planner/runtime_factory.py` — secret-free `config.json` plus env overrides → `RuntimeConfig` + HTTP/LLM/catalog ports
   - `src/travel_planner/async_runner.py` — background loop + runtime lifecycle
   - `src/travel_planner/search.py` — domain prompt + chat persistence
   - `src/travel_planner/turn_mapper.py` — `TurnResult` → API JSON
   - `src/travel_planner/tool_order.py` — static v1/v2 axes (pipeline not on Direct)
   - `src/travel_planner/app.py` — Flask routes
-- **Data flow**: secret-free config + env sentinels → runtime → `TurnResult` → `results[]` / `answer` / `trace` → UI. Secrets are read from the process environment (`LLM_API_KEY`, `ZEUS_PASSWORD`), not from `config.json`.
+- **Data flow**: secret-free config, with non-empty env vars overriding URL, auth, username, target, mode, and LLM base URL/model → runtime → `TurnResult` → `results[]` / `answer` / `trace` → UI. Secrets are read from the process environment (`LLM_API_KEY`, `ZEUS_PASSWORD`), not from `config.json`.
 - **Dependencies**: `kotenai-zeus-client` **2.5.4** (sibling `../zeus_client_python`; boot gate 2.5.x + `parse_pipeline_envelope`), Flask, httpx. No FastAPI.
 
 ### Design law (family SoT)
@@ -67,7 +67,7 @@ There is no repo named `zeus_chat_design`. TravelPlan follows:
 | Hashes | `verify_config.py` reads published stamp / bind; never invents `md5:` |
 | Transcript | `chat_store` + `SessionHandle` + `prior_messages`; never invent session ids |
 | Correlation | `debug.preferred_req_id` / hop `req_id` on `trace` |
-| Secrets | Env names on config (`password_env` / `api_key_env`). Values live only in `.env` (`ZEUS_PASSWORD`, `LLM_API_KEY`). JSON secrets are not copied into the overlay |
+| Secrets | `scope_credentials.*.password_env` and `llm.api_key_env` are names. Values live only in `.env` (`ZEUS_PASSWORD`, `LLM_API_KEY`). `EnvSecretStore` reads those names |
 
 Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/api/API_LAYER_A.md`, `API_SESSION.md`, `CHECKLIST.md`; `zeus_chat_request/docs/MULTI_ROUND_CLIENT.md`.
 
@@ -77,10 +77,10 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 - Mutating HTML/CSS/JS as part of BFF cleanup
 
 ## 3. Setup
-- **Prerequisites**: Python 3.11+, Zeus with `travel-sample` / `inventory` / `hotel`, `LLM_API_KEY` in `.env`
+- **Prerequisites**: Python 3.11+, Zeus with `travel-sample` / `_default` / `_default`, `LLM_API_KEY` in `.env`
 - **Environment variables** (see `.env.example`):
   - `ZEUS_URL` — `http://localhost:8080` in `.env.example`; Compose sets `http://host.docker.internal:8080` and wins over the file
-  - `ZEUS_BUCKET` / `ZEUS_SCOPE` / `ZEUS_COLLECTION` — `travel-sample` / `inventory` / `hotel`
+  - `ZEUS_BUCKET` / `ZEUS_SCOPE` / `ZEUS_COLLECTION` — `travel-sample` / `_default` / `_default`
   - `ZEUS_MODE` — `analytics`
   - `ZEUS_PASSWORD` — Zeus password (empty in `.env.example`)
   - `LLM_API_KEY` — required LLM key (empty in `.env.example`). Do not put it in `config.json`
@@ -94,7 +94,7 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
   1. `cp .env.example .env` and set `LLM_API_KEY` and `ZEUS_PASSWORD`
   2. `pip install -e ".[dev]"` (sibling `../zeus_client_python` must export `parse_pipeline_envelope`)
   3. `python -m travel_planner` or `docker compose up -d --build` (compose bind-mounts `./.env` read-only and the sibling client; it does not mount `config.json`)
-- **Configuration**: Committed `config.json` matches `config.example.json`: `password_env` `ZEUS_PASSWORD`, `api_key_env` `LLM_API_KEY`, sentinels for auth mode, mode, base URL, and model, target `travel-sample` / `inventory` / `hotel`, `client_floor` `client-floor-6.1`, durable sessions on, `session.semantic_cache.enabled` false. `OverlaySecretStore` reads the process environment only.
+- **Configuration**: Committed `config.json` holds `auth_mode` `basic`, `settings.mode` `analytics`, `llm.base_url` `https://api.x.ai/v1`, `llm.model` `grok-4-1-fast-non-reasoning`, `scope_credentials` username `demo_1` and `password_env` `ZEUS_PASSWORD`, `api_key_env` `LLM_API_KEY`, target `travel-sample` / `_default` / `_default`, `client_floor` `client-floor-6.1`, durable sessions on, `session.semantic_cache.enabled` false. A non-empty env var overrides those non-secret fields. `EnvSecretStore` reads the secret names. `HOST` is the listen address for `python -m travel_planner`.
 - **Verification**:
   ```bash
   pytest -q
@@ -144,7 +144,7 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
   - `src/travel_planner/app.py` — Flask + `/api/health`
   - `src/travel_planner/tool_order.py` — trace axes
   - `src/travel_planner/zeus_config.py` — `.env` load and path env (no session monkeypatch)
-  - `.env.example`, `config.json`, `config.example.json` — beer env contract; secret-free config
+  - `.env.example`, `config.json` — beer env contract; secret-free config
   - `scripts/verify_config.py` — V2 catalog/hash check
   - `tests/test_v2_bff_search.py`, `tests/test_runtime_factory.py`
 - **Tickets**: Travel V2 BFF pattern ZD-8; package cutover ZCP-33; [ZD-27](https://kotenai.atlassian.net/browse/ZD-27) beer `.env` / secret-free `config.json`
@@ -166,3 +166,6 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 | 2026-11-02 | Grok | Version tests follow `REQUIRED_CLIENT_VERSION_PREFIX`. They do not pin patch `2.5.4`. See `.grok/plans/ALIGN_VERSION_GATE_TESTS.md` |
 | 2026-11-02 | Grok | Navbar Zeus liveness indicator. See `.grok/guides/ZEUS_HEALTH_INDICATOR.md` |
 | 2026-11-06 | Grok | ZD-27: `.env.example` + `LLM_API_KEY` / `ZEUS_PASSWORD`; factory resolves sentinels and does not promote JSON secrets |
+| 2026-11-06 | Grok | Drop sentinels. Env overrides file fields. `HOST` binds the process. `EnvSecretStore` reads secrets |
+| 2026-11-06 | Grok | Removed `config.example.json`. `config.json` is the only config file |
+| 2026-11-06 | Grok | Basic auth identity is only `scope_credentials`. Top-level `zeus.username` and `zeus.password_env` are gone |

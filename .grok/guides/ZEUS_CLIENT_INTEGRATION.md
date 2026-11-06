@@ -27,7 +27,7 @@
 
 - **Import-order constraint**: Path env vars are set in `travel_planner.__init__` via `configure_paths()` before Flask builds the runtime.
 
-- **Config mapping**: `config.json` (`zeus`, `target`, `llm`, `settings`, plus travel `scope_contracts` / `chat_requests_sync`) is mapped to `RuntimeConfig` in `runtime_factory.py`. Sentinels `ZEUS_AUTH_MODE`, `ZEUS_MODE`, `LLM_BASE_URL`, and `LLM_MODEL` resolve from the environment. When `ZEUS_URL` is set, `zeus.auth_mode` is replaced from `ZEUS_AUTH_MODE`. `llm.api_key_env` stays the name `LLM_API_KEY` and `zeus.password_env` stays `ZEUS_PASSWORD`. `session.semantic_cache` uses public `SemanticCacheConfig` (`enabled` only). `OverlaySecretStore` reads the process environment and does not copy inline JSON secrets.
+- **Config mapping**: `config.json` (`zeus`, `target`, `llm`, `settings`, plus travel `scope_contracts` / `chat_requests_sync`) is mapped to `RuntimeConfig` in `runtime_factory.py`. A non-empty env var overrides the file for `ZEUS_URL`, `ZEUS_AUTH_MODE`, `ZEUS_USERNAME`, `ZEUS_BUCKET`, `ZEUS_SCOPE`, `ZEUS_COLLECTION`, `ZEUS_MODE`, `LLM_BASE_URL`, and `LLM_MODEL`. `llm.api_key_env` stays the name `LLM_API_KEY`. The Zeus user and `password_env` live on `zeus.scope_credentials` (`ZEUS_PASSWORD`). `session.semantic_cache` uses public `SemanticCacheConfig` (`enabled` only). `EnvSecretStore` reads those names from the process environment. Inline JSON secrets are not read.
 
 - **Key components**:
   - `src/travel_planner/zeus_config.py` — `.env` load plus path configuration
@@ -44,12 +44,12 @@
 
 ## 3. Setup
 
-- **Prerequisites**: Python 3.11+, Zeus Engine with `travel-sample` / `inventory` / `hotel`, `LLM_API_KEY` in `.env`
+- **Prerequisites**: Python 3.11+, Zeus Engine with `travel-sample` / `_default` / `_default`, `LLM_API_KEY` in `.env`
 
 - **Environment variables** (names and defaults from `.env.example`):
   - `ZEUS_URL` — `http://localhost:8080` (Compose sets `http://host.docker.internal:8080` and wins over the file)
   - `ZEUS_BUCKET` — `travel-sample`
-  - `ZEUS_SCOPE` — `inventory`
+  - `ZEUS_SCOPE` — `_default`
   - `ZEUS_COLLECTION` — `hotel`
   - `ZEUS_MODE` — `analytics`
   - `ZEUS_PASSWORD` — basic-auth password (empty in `.env.example`)
@@ -67,7 +67,7 @@
   3. Ensure `data/chat_requests/by_use_case/chat_request_travel_booking_v2.json` exists
   4. `python -m travel_planner` or `docker compose up --build`
 
-- **Configuration**: Committed `config.json` (identical to `config.example.json`) is secret-free. `password_env` is `ZEUS_PASSWORD` and `api_key_env` is `LLM_API_KEY`. Legacy nested `llm_provider` / `samples` keys still map when present; inline secret fields are ignored.
+- **Configuration**: Committed `config.json` is secret-free. `scope_credentials["travel-sample/_default"]` holds `username` `demo_1` and `password_env` `ZEUS_PASSWORD`. `api_key_env` is `LLM_API_KEY`. There is no top-level `zeus.username` or `zeus.password_env`. Legacy nested `llm_provider` / `samples` keys still map when present; inline secret fields are ignored.
 
 - **Verification**: `pytest tests/test_app.py`; manual `GET /api/tool-order` returns `v1`/`v2` lists.
 
@@ -126,11 +126,11 @@
 
 - **Files changed / owned by this feature**:
   - `pyproject.toml`, `requirements.txt` — `kotenai-zeus-client` and `python-dotenv`
-  - `.env.example` — beer variable names; travel bucket `travel-sample`, scope `inventory`, collection `hotel`, `PORT=5000`; empty `LLM_API_KEY` and `ZEUS_PASSWORD`
-  - `config.json`, `config.example.json` — identical secret-free document
+  - `.env.example` — beer variable names; travel bucket `travel-sample`, scope `_default`, collection `_default`, `PORT=5000`; empty `LLM_API_KEY` and `ZEUS_PASSWORD`
+  - `config.json` — committed secret-free document
   - `src/travel_planner/__init__.py` — early `configure_paths()`
-  - `src/travel_planner/zeus_config.py` — `.env` load and client-env overlay
-  - `src/travel_planner/runtime_factory.py` — sentinel resolution; no JSON secret promotion
+  - `src/travel_planner/zeus_config.py` — `.env` load (`override=False`, `interpolate=False`)
+  - `src/travel_planner/runtime_factory.py` — env overrides the file; `EnvSecretStore` reads secret names
   - `src/travel_planner/search.py`, `async_runner.py`, `app.py` — rewired imports
   - `src/travel_planner/chat_store.py`, `tool_order.py` — lifted from vendor
   - `data/chat_requests/` — travel_booking catalog
@@ -152,3 +152,5 @@
 | 2026-09-15 | Grok | Docs pin + boot gate **2.4.0** / 2.4.x (`parse_pipeline_envelope`) |
 | 2026-11-02 | Grok | Boot gate accepts **2.5.4** (2.5.x family) |
 | 2026-11-06 | Grok | ZD-27: load `.env.example` contract; `LLM_API_KEY` stays out of `config.json` |
+| 2026-11-06 | Grok | Env overrides file values; `EnvSecretStore` replaces the empty secret overlay |
+| 2026-11-06 | Grok | Removed `config.example.json`. `config.json` is the only config file |

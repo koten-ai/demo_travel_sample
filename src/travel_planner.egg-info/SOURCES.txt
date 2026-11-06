@@ -31,3 +31,4 @@ tests/test_output_schema.py
 tests/test_results_parser.py
 tests/test_runtime_factory.py
 tests/test_v2_bff_search.py
+tests/test_vendored_catalog.py

@@ -40,21 +40,21 @@
 
 ## 3. Setup
 
-- **Prerequisites**: Docker (recommended) or Python 3.12+, running Zeus with `travel-sample` / `inventory` / `hotel`, `LLM_API_KEY` in `.env`
+- **Prerequisites**: Docker (recommended) or Python 3.12+, running Zeus with `travel-sample` / `_default` / `_default`, `LLM_API_KEY` in `.env`
 
 - **Environment variables** (copy `.env.example`; Compose `ZEUS_URL` wins over the file):
   - `ZEUS_URL` — Zeus public API (`http://localhost:8080` in `.env.example`; Compose uses `http://host.docker.internal:8080`)
   - `ZEUS_BUCKET` — `travel-sample`
-  - `ZEUS_SCOPE` — `inventory`
-  - `ZEUS_COLLECTION` — `hotel`
-  - `ZEUS_MODE` — `analytics` (fills the `settings.mode` sentinel)
+  - `ZEUS_SCOPE` — `_default`
+  - `ZEUS_COLLECTION` — `_default`
+  - `ZEUS_MODE` — `analytics` (overrides `settings.mode` when set)
   - `ZEUS_AUTH_MODE` — `basic`
-  - `ZEUS_USERNAME` — `demo_1`
+  - `ZEUS_USERNAME` — `demo_1` (overrides the active `scope_credentials` username when set)
   - `ZEUS_PASSWORD` — basic-auth password (empty in `.env.example`; set in `.env` only)
   - `LLM_API_KEY` — required LLM key (empty in `.env.example`; never write it into `config.json`)
   - `LLM_BASE_URL` — `https://api.x.ai/v1`
   - `LLM_MODEL` — `grok-4-1-fast-non-reasoning`
-  - `HOST` — `0.0.0.0`
+  - `HOST` — listen host for `python -m travel_planner` (`0.0.0.0`)
   - `PORT` — Flask port (default `5000`; Compose publishes host `5050`)
   - `ZEUS_CLIENT_CONFIG_DIR` — Directory for `config.json` (default: project root)
   - `ZEUS_CHAT_REQUESTS_DIR` — Local catalog dir (default: `data/chat_requests`)
@@ -109,7 +109,7 @@
 
 - `pyproject.toml`, `src/travel_planner/`, `data/chat_requests/`, `tests/`, `Dockerfile`, `docker-compose.yml`
 - `.env.example` — copy to `.env`; set `LLM_API_KEY` and `ZEUS_PASSWORD`
-- `config.json` / `config.example.json` — identical secret-free document (`password_env`, `api_key_env`, sentinels)
+- `config.json` — committed secret-free document (`password_env`, `api_key_env`; env overrides non-secret fields)
 - **Tickets**: [ZD-27](https://kotenai.atlassian.net/browse/ZD-27) — beer `.env` / `config.json` contract
 - `src/travel_planner/templates/index.html` — multi-line `#searchInput` textarea; `#search-btn-cancel` loader ring + stop square
 - `src/travel_planner/static/app.js` — autosize + Enter/Shift+Enter; in-flight cancel via `AbortController`
@@ -144,3 +144,6 @@
 | 2026-09-15 | Grok | Client pin / UI stamp **2.4.0** (boot gate 2.4.x); see `FIX_ZEUS_CLIENT_2_4_GAPS.md` |
 | 2026-11-02 | Grok | Client pin / UI stamp **2.5.4** (boot gate 2.5.x); see `ACCEPT_ZEUS_CLIENT_2_5_4.md` |
 | 2026-11-06 | Grok | ZD-27: secrets live in `.env` (`LLM_API_KEY`, `ZEUS_PASSWORD`); `config.json` is secret-free |
+| 2026-11-06 | Grok | `ZEUS_USERNAME`, bucket/scope/collection, and `HOST` override the file or bind address |
+| 2026-11-06 | Grok | Removed `config.example.json` and `config.dev.json`. `config.json` is the only config file |
+| 2026-11-06 | Grok | Basic auth identity is only `scope_credentials`. Top-level `zeus.username` and `zeus.password_env` are gone |

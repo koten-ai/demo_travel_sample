@@ -9,7 +9,7 @@ from travel_planner.paths import PROJECT_ROOT
 
 CHAT_DIR = PROJECT_ROOT / "data" / "chat_requests"
 PIN = CHAT_DIR / "chat_request_analytics_base-6.1.json"
-LOAD_PATH = CHAT_DIR / "travel-sample__inventory" / "chat_request_analytics_v2.json"
+LOAD_PATH = CHAT_DIR / "travel-sample__default" / "chat_request_analytics_v2.json"
 CONTRACT_HASH = "md5:5aacbf1d7a4d9d5de9436cdffbce050f"
 
 
@@ -32,7 +32,7 @@ def test_analytics_base_6_1_pin_is_vendored():
     assert len(doc.get("verbs") or []) == 13
 
 
-def test_inventory_load_path_matches_pin():
+def test_default_scope_load_path_matches_pin():
     pin = _load(PIN)
     loaded = _load(LOAD_PATH)
     assert loaded.get("_hash") == pin.get("_hash")
