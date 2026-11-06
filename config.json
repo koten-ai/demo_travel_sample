@@ -1,0 +1,57 @@
+{
+  "profile": "development",
+  "client_floor": "client-floor-6.1",
+  "chat_requests_dir": "data/chat_requests",
+  "_comment": "Secret-free. Copy .env.example to .env and set LLM_API_KEY and ZEUS_PASSWORD. Do not put secrets in this file. auth_mode, settings.mode, llm.base_url, and llm.model are env sentinels.",
+  "zeus": {
+    "url": "http://localhost:8080",
+    "auth_mode": "ZEUS_AUTH_MODE",
+    "timeout_s": 30,
+    "username": "demo_1",
+    "password_env": "ZEUS_PASSWORD",
+    "enable_durable_sessions": true,
+    "scope_credentials": {
+      "travel-sample/inventory": {
+        "username": "demo_1",
+        "password_env": "ZEUS_PASSWORD"
+      }
+    },
+    "scope_contracts": {
+      "travel-sample/inventory": {
+        "analytics": {
+          "contract_id": "analytics_base5_2",
+          "contract_hash": "md5:5aacbf1d7a4d9d5de9436cdffbce050f"
+        }
+      }
+    }
+  },
+  "target": {
+    "bucket": "travel-sample",
+    "scope": "inventory",
+    "collection": "hotel"
+  },
+  "llm": {
+    "provider": "xai",
+    "base_url": "LLM_BASE_URL",
+    "model": "LLM_MODEL",
+    "api_key_env": "LLM_API_KEY",
+    "timeout_s": 120
+  },
+  "settings": {
+    "mode": "ZEUS_MODE",
+    "durable_sessions": true,
+    "ai_process_result": false,
+    "max_rounds": 12,
+    "ignore_user_tool_path_hints": true
+  },
+  "session": {
+    "semantic_cache": {
+      "enabled": false
+    }
+  },
+  "chat_requests_sync": {
+    "scopes": "from_contracts",
+    "modes": ["analytics"],
+    "on_startup": true
+  }
+}

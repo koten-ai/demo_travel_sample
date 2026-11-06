@@ -17,7 +17,7 @@
 
 ## 2. Architecture & Flow
 - **High-level flow**:
-  1. Package import calls `configure_paths()` (config dir, chat_requests dir, chat log).
+  1. Package import calls `configure_paths()` (load `.env` without overriding existing vars, map beer names onto empty `ZEUS_CLIENT_*` keys, then config dir, chat_requests dir, chat log).
   2. `create_app()` → `startup()` builds a process-scoped `ZeusRuntime` and optionally `rt.catalog.sync()`.
   3. `POST /api/search` → `run_search()` → `rt.agent.run_turn` (omits `chat_request` so 2.5.4 `load_for_turn` merges SCOPE BRIEF + MINI-SCHEMA). Query `debug=true` (same kill switch as the tracer) passes `rewind=True` for that turn only.
   4. `turn_mapper` peels G1 user answer, attaches detective onto `trace` (not the chat text), strips G2 keys, filters rows with `DEMO_OUTPUT_SCHEMA`, and runs the card waterfall.
@@ -34,13 +34,13 @@ UI (unchanged templates/static)
 ```
 
 - **Key components**:
-  - `src/travel_planner/runtime_factory.py` — nested `config.json` → `RuntimeConfig` + HTTP/LLM/catalog ports
+  - `src/travel_planner/runtime_factory.py` — secret-free `config.json` sentinels → `RuntimeConfig` + HTTP/LLM/catalog ports
   - `src/travel_planner/async_runner.py` — background loop + runtime lifecycle
   - `src/travel_planner/search.py` — domain prompt + chat persistence
   - `src/travel_planner/turn_mapper.py` — `TurnResult` → API JSON
   - `src/travel_planner/tool_order.py` — static v1/v2 axes (pipeline not on Direct)
   - `src/travel_planner/app.py` — Flask routes
-- **Data flow**: nested config + overlay secrets → runtime → `TurnResult` → `results[]` / `answer` / `trace` → UI
+- **Data flow**: secret-free config + env sentinels → runtime → `TurnResult` → `results[]` / `answer` / `trace` → UI. Secrets are read from the process environment (`LLM_API_KEY`, `ZEUS_PASSWORD`), not from `config.json`.
 - **Dependencies**: `kotenai-zeus-client` **2.5.4** (sibling `../zeus_client_python`; boot gate 2.5.x + `parse_pipeline_envelope`), Flask, httpx. No FastAPI.
 
 ### Design law (family SoT)
@@ -67,7 +67,7 @@ There is no repo named `zeus_chat_design`. TravelPlan follows:
 | Hashes | `verify_config.py` reads published stamp / bind; never invents `md5:` |
 | Transcript | `chat_store` + `SessionHandle` + `prior_messages`; never invent session ids |
 | Correlation | `debug.preferred_req_id` / hop `req_id` on `trace` |
-| Secrets | Env names on config; overlay for demo inline keys |
+| Secrets | Env names on config (`password_env` / `api_key_env`). Values live only in `.env` (`ZEUS_PASSWORD`, `LLM_API_KEY`). JSON secrets are not copied into the overlay |
 
 Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/api/API_LAYER_A.md`, `API_SESSION.md`, `CHECKLIST.md`; `zeus_chat_request/docs/MULTI_ROUND_CLIENT.md`.
 
@@ -77,18 +77,24 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 - Mutating HTML/CSS/JS as part of BFF cleanup
 
 ## 3. Setup
-- **Prerequisites**: Python 3.11+, Zeus with `travel-sample/_default`, LLM API key
-- **Environment variables**:
+- **Prerequisites**: Python 3.11+, Zeus with `travel-sample` / `inventory` / `hotel`, `LLM_API_KEY` in `.env`
+- **Environment variables** (see `.env.example`):
+  - `ZEUS_URL` — `http://localhost:8080` in `.env.example`; Compose sets `http://host.docker.internal:8080` and wins over the file
+  - `ZEUS_BUCKET` / `ZEUS_SCOPE` / `ZEUS_COLLECTION` — `travel-sample` / `inventory` / `hotel`
+  - `ZEUS_MODE` — `analytics`
+  - `ZEUS_PASSWORD` — Zeus password (empty in `.env.example`)
+  - `LLM_API_KEY` — required LLM key (empty in `.env.example`). Do not put it in `config.json`
+  - `LLM_BASE_URL` — `https://api.x.ai/v1`
+  - `LLM_MODEL` — `grok-4-1-fast-non-reasoning`
+  - `PORT` — Flask listen port (`5000`; Compose publishes `5050`)
   - `ZEUS_CLIENT_CONFIG_DIR` — directory for `config.json` (default: project root)
   - `ZEUS_CHAT_REQUESTS_DIR` — catalog snapshots (default: `data/chat_requests`)
   - `CHAT_LOG_PATH` — JSONL chat store
-  - `ZEUS_URL` — overrides `zeus.url` (Compose sets `http://host.docker.internal:8080`)
-  - `PORT` — Flask listen port (default `5000`)
 - **Install / bootstrap steps**:
-  1. `cp config.example.json config.json` and set LLM `api_key` / Zeus password
+  1. `cp .env.example .env` and set `LLM_API_KEY` and `ZEUS_PASSWORD`
   2. `pip install -e ".[dev]"` (sibling `../zeus_client_python` must export `parse_pipeline_envelope`)
-  3. `python -m travel_planner` or `docker compose up -d --build` (compose bind-mounts the sibling client)
-- **Configuration**: Keep nested `zeus` + `llm_provider` + `samples` + `default_mode`. Optional additive keys: `profile`, `settings.ai_process_result` (default false), `session.semantic_cache.enabled` (default false). Inline secrets are copied into an overlay secret store (`password_env` / `api_key_env`); they are never stored on `RuntimeConfig`.
+  3. `python -m travel_planner` or `docker compose up -d --build` (compose bind-mounts `./.env` read-only and the sibling client; it does not mount `config.json`)
+- **Configuration**: Committed `config.json` matches `config.example.json`: `password_env` `ZEUS_PASSWORD`, `api_key_env` `LLM_API_KEY`, sentinels for auth mode, mode, base URL, and model, target `travel-sample` / `inventory` / `hotel`, `client_floor` `client-floor-6.1`, durable sessions on, `session.semantic_cache.enabled` false. `OverlaySecretStore` reads the process environment only.
 - **Verification**:
   ```bash
   pytest -q
@@ -115,7 +121,7 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | `runtime not started` | `startup()` skipped / factory failed | Check `config.json`; inspect boot logs |
-| `llm api_key missing` | Empty `llm_provider.api_key` and no `XAI_API_KEY` | Set key in config or env |
+| `llm api_key missing` | `LLM_API_KEY` unset | Set `LLM_API_KEY` in `.env` from `.env.example`. Do not put the API key in `config.json` |
 | `catalog not found for mode='travel_booking'` | Missing snapshot under `data/chat_requests` | Restore catalogs or enable `chat_requests_sync.on_startup` |
 | Empty cards, non-empty answer | Hops lacked name/description; markdown fallback failed | Inspect `trace.hops` / `structured_response.zeus_data` |
 | Answer is a fenced HTML `<pipeline>` dump, empty `results`/`hops` | Model wrote the plan as text; loop took `direct`, **or** the Docker image has a client older than 2.5.4 without `parse_pipeline_envelope` | Rebuild so sibling `../zeus_client_python` is editable at `/opt/zeus_client_python`; `GET /api/health` must show `pipeline_envelope_recovery: true`. See `.grok/guides/PIPELINE_XML_AS_ANSWER.md` |
@@ -137,10 +143,11 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
   - `src/travel_planner/async_runner.py` — runtime lifecycle
   - `src/travel_planner/app.py` — Flask + `/api/health`
   - `src/travel_planner/tool_order.py` — trace axes
-  - `src/travel_planner/zeus_config.py` — path env only (no session monkeypatch)
+  - `src/travel_planner/zeus_config.py` — `.env` load and path env (no session monkeypatch)
+  - `.env.example`, `config.json`, `config.example.json` — beer env contract; secret-free config
   - `scripts/verify_config.py` — V2 catalog/hash check
   - `tests/test_v2_bff_search.py`, `tests/test_runtime_factory.py`
-- **Tickets**: Travel V2 BFF pattern ZD-8; package cutover ZCP-33
+- **Tickets**: Travel V2 BFF pattern ZD-8; package cutover ZCP-33; [ZD-27](https://kotenai.atlassian.net/browse/ZD-27) beer `.env` / secret-free `config.json`
 - **Commits**: (fill on commit)
 - **Pull requests**: n/a
 
@@ -158,3 +165,4 @@ Key docs: `zeus_client_design/docs/product/HOW_TO_USE_ZEUS_CLIENT.md`, `guides/a
 | 2026-11-02 | Grok | Boot gate accepts **2.5.4** (2.5.x family). See `.grok/plans/ACCEPT_ZEUS_CLIENT_2_5_4.md` |
 | 2026-11-02 | Grok | Version tests follow `REQUIRED_CLIENT_VERSION_PREFIX`. They do not pin patch `2.5.4`. See `.grok/plans/ALIGN_VERSION_GATE_TESTS.md` |
 | 2026-11-02 | Grok | Navbar Zeus liveness indicator. See `.grok/guides/ZEUS_HEALTH_INDICATOR.md` |
+| 2026-11-06 | Grok | ZD-27: `.env.example` + `LLM_API_KEY` / `ZEUS_PASSWORD`; factory resolves sentinels and does not promote JSON secrets |

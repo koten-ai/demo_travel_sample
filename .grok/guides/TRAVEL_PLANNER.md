@@ -36,27 +36,40 @@
   - `data/chat_requests/` — `travel_booking` catalog snapshot
   - `kotenai-zeus-client` — ZeusRuntime pip package (see `.grok/guides/ZEUS_CLIENT_V2_BFF.md`)
 
-- **Dependencies**: `kotenai-zeus-client` **2.5.4** (sibling `../zeus_client_python`; boot gate 2.5.x), Zeus server, LLM API key in `config.json`
+- **Dependencies**: `kotenai-zeus-client` **2.5.4** (sibling `../zeus_client_python`; boot gate 2.5.x), Zeus server, `LLM_API_KEY` in `.env` (not in `config.json`). See `.env.example`.
 
 ## 3. Setup
 
-- **Prerequisites**: Docker (recommended) or Python 3.12+, running Zeus with `travel-sample/_default` scope, LLM API key
+- **Prerequisites**: Docker (recommended) or Python 3.12+, running Zeus with `travel-sample` / `inventory` / `hotel`, `LLM_API_KEY` in `.env`
 
-- **Environment variables**:
-  - `ZEUS_URL` — Overrides Zeus URL in config (default `http://host.docker.internal:8080` in Docker)
+- **Environment variables** (copy `.env.example`; Compose `ZEUS_URL` wins over the file):
+  - `ZEUS_URL` — Zeus public API (`http://localhost:8080` in `.env.example`; Compose uses `http://host.docker.internal:8080`)
+  - `ZEUS_BUCKET` — `travel-sample`
+  - `ZEUS_SCOPE` — `inventory`
+  - `ZEUS_COLLECTION` — `hotel`
+  - `ZEUS_MODE` — `analytics` (fills the `settings.mode` sentinel)
+  - `ZEUS_AUTH_MODE` — `basic`
+  - `ZEUS_USERNAME` — `demo_1`
+  - `ZEUS_PASSWORD` — basic-auth password (empty in `.env.example`; set in `.env` only)
+  - `LLM_API_KEY` — required LLM key (empty in `.env.example`; never write it into `config.json`)
+  - `LLM_BASE_URL` — `https://api.x.ai/v1`
+  - `LLM_MODEL` — `grok-4-1-fast-non-reasoning`
+  - `HOST` — `0.0.0.0`
+  - `PORT` — Flask port (default `5000`; Compose publishes host `5050`)
   - `ZEUS_CLIENT_CONFIG_DIR` — Directory for `config.json` (default: project root)
   - `ZEUS_CHAT_REQUESTS_DIR` — Local catalog dir (default: `data/chat_requests`)
   - `CHAT_LOG_PATH` — Chat persistence file (default `/app/data/chats.jsonl`)
-  - `PORT` — Flask port (default `5000`)
 
 - **Install / bootstrap**:
-  1. `cp config.example.json config.json` and add LLM `api_key`
-  2. `docker compose up --build`
-  3. Open http://localhost:5000
+  1. `cp .env.example .env`, then set `LLM_API_KEY` and `ZEUS_PASSWORD`. Leave `config.json` `api_key_env` as the name `LLM_API_KEY`.
+  2. `docker compose up --build` (bind-mounts `./.env:/app/.env:ro`; does not mount `config.json`)
+  3. Open http://localhost:5050 (container port 5000)
 
 - **Local dev (no Docker)**:
   ```powershell
   cd demo_travel_sample
+  cp .env.example .env
+  # set LLM_API_KEY and ZEUS_PASSWORD
   pip install -e .
   python -m travel_planner
   ```
@@ -86,8 +99,8 @@
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| `no Zeus URL configured` | Missing config | Create `config.json` from example |
-| `llm_provider has no api_key` | Empty LLM key | Fill `llm_provider.api_key` or legacy `providers.<name>.api_key` |
+| `no Zeus URL configured` | `ZEUS_URL` unset | Set `ZEUS_URL` in `.env` from `.env.example` |
+| LLM key missing | `LLM_API_KEY` unset | Set `LLM_API_KEY` in `.env`. Do not put the API key in `config.json` |
 | `no chat_request file for mode 'travel_booking'` | Missing catalog | Restore `data/chat_requests/by_use_case/chat_request_travel_booking_v2.json` |
 | Empty result cards | LLM returned prose only | Check `structured_answer` in API response; see `MARKDOWN_ANSWER_PARSER.md` |
 | Docker can't reach Zeus | Wrong `ZEUS_URL` | Set to host-accessible Zeus URL |
@@ -95,6 +108,9 @@
 ## 6. Related Artifacts
 
 - `pyproject.toml`, `src/travel_planner/`, `data/chat_requests/`, `tests/`, `Dockerfile`, `docker-compose.yml`
+- `.env.example` — copy to `.env`; set `LLM_API_KEY` and `ZEUS_PASSWORD`
+- `config.json` / `config.example.json` — identical secret-free document (`password_env`, `api_key_env`, sentinels)
+- **Tickets**: [ZD-27](https://kotenai.atlassian.net/browse/ZD-27) — beer `.env` / `config.json` contract
 - `src/travel_planner/templates/index.html` — multi-line `#searchInput` textarea; `#search-btn-cancel` loader ring + stop square
 - `src/travel_planner/static/app.js` — autosize + Enter/Shift+Enter; in-flight cancel via `AbortController`
 - `src/travel_planner/static/app.css` — composer min/max height; `.search-box` max-width `calc(42rem * 1.6 * 0.8)`; in-flight `.search-btn-busy` ring + stop
@@ -127,3 +143,4 @@
 | 2026-09-02 | Grok | `?debug=true` opts `/api/search` into Zeus rewind; see `DEBUG_QUERY_REWIND.md` |
 | 2026-09-15 | Grok | Client pin / UI stamp **2.4.0** (boot gate 2.4.x); see `FIX_ZEUS_CLIENT_2_4_GAPS.md` |
 | 2026-11-02 | Grok | Client pin / UI stamp **2.5.4** (boot gate 2.5.x); see `ACCEPT_ZEUS_CLIENT_2_5_4.md` |
+| 2026-11-06 | Grok | ZD-27: secrets live in `.env` (`LLM_API_KEY`, `ZEUS_PASSWORD`); `config.json` is secret-free |

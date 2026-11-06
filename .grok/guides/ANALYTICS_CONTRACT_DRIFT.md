@@ -47,11 +47,11 @@
   ```json
   "zeus": {
     "url": "http://host.docker.internal:8080",
-    "auth_mode": "basic",
+    "auth_mode": "ZEUS_AUTH_MODE",
     "username": "demo_1",
-    "password": "<policy-compliant password>",
+    "password_env": "ZEUS_PASSWORD",
     "scope_credentials": {
-      "travel-sample/_default": { "username": "demo_1", "password": "<same>" }
+      "travel-sample/_default": { "username": "demo_1", "password_env": "ZEUS_PASSWORD" }
     },
     "scope_contracts": {
       "travel-sample/_default": {
@@ -104,13 +104,14 @@
 
 ## 6. Related Artifacts
 - **Files**:
-  - `config.json` / `config.example.json`
+  - `config.json` / `config.example.json` — identical secret-free document (`password_env` `ZEUS_PASSWORD`, `api_key_env` `LLM_API_KEY`). Copy `.env.example` to `.env` for `LLM_API_KEY` and `ZEUS_PASSWORD`. Do not put the API key in either JSON file.
   - `docker-compose.yml` (`ZEUS_URL`)
   - `data/chat_requests/travel-sample__default/chat_request_analytics_v2.json`
   - `src/travel_planner/zeus_config.py` — `/v2` session shim
   - `src/travel_planner/answer_parser.py` — accept dict answers
   - `zeus_client_python/src/zeus/session.py` — `/v2/session*` paths
-- **Tickets**: none
+- **Tickets**:
+  - [ZD-27](https://kotenai.atlassian.net/browse/ZD-27) — secret-free `config.json` / `config.example.json`
 - **Commits**: local
 
 ## 7. Changelog
@@ -119,3 +120,4 @@
 | 2026-07-09 | agent | Initial guide: trailing-ws brief-merge drift |
 | 2026-07-09 | agent | Document unstamped V1 37-tool overwrite |
 | 2026-07-10 | agent | Docker URL, basic auth seed, `/v2/session` ZE-35, hash realign to `a148645f…` |
+| 2026-11-06 | Grok | ZD-27: `config.json` and `config.example.json` are the same secret-free file; passwords are `password_env` names |
